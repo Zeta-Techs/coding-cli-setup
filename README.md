@@ -20,7 +20,7 @@
 ## 安装与使用
 - 下载脚本并执行：
   ```
-  curl -fsSL https://raw.githubusercontent.com/Zeta-ZhaoLi/coding-cli-setup/main/coding-cli-setup.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.sh | bash
   ```
 - 按提示选择要配置的应用（1/2/3）。
 - 选择站点时提供 4 个选项：
