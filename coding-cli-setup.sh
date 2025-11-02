@@ -6,16 +6,16 @@
 #   2) OpenAI Codex CLI (~/.codex/config.toml + ~/.codex/auth.json)
 #   3) Anthropic Claude Code CLI (ANTHROPIC_* envs in ~/.bashrc / ~/.zshrc)
 #
-# Site choices inside each app:
-#   1) ZetaTechs API 主站: https://api.zetatechs.com(/v1)
+# 站点选项（每个应用内均提供）：
+#   1) ZetaTechs API 主站:   https://api.zetatechs.com(/v1)
 #   2) ZetaTechs API 企业站: https://ent.zetatechs.com(/v1)
 #   3) ZetaTechs API Codex站: https://codex.zetatechs.com(/v1)
 #   4) 自定义: 手动输入 base_url（会给出 1 号站点作为格式示例），随后输入 API Key
 #
-# Behavior:
-# - 如果再次运行并直接回车不选择站点/不输入 Key，将保持原值不变。
-# - 若选择自定义，会要求输入新的 base_url；API Key 照常提示输入。
-# - 脚本尽量避免产生无效 JSON（推荐安装 jq 以确保严格格式）。
+# 行为说明：
+# - 再次运行时若直接回车不选择站点/不输入 Key，将保持原值不变。
+# - 若选择“自定义”，会要求输入新的 base_url；之后照常提示输入 API Key。
+# - 推荐安装 jq 以确保写入合法 JSON。
 #
 # Copyright (c) 2025
 
@@ -31,8 +31,8 @@ fi
 # -------- Utils --------
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 trim() { printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
-read_tty() { local __p="$1"; local input; read -r -p "$__p" input < /dev/tty || true; printf "%s" "${input:-}"; }
-read_secret_tty() { local __p="$1"; local input; read -r -s -p "$__p" input < /dev/tty || true; echo; printf "%s" "${input:-}"; }
+read_tty() { local __p="${1:-}"; local input; read -r -p "$__p" input < /dev/tty || true; printf "%s" "${input:-}"; }
+read_secret_tty() { local __p="${1:-}"; local input; read -r -s -p "$__p" input < /dev/tty || true; echo; printf "%s" "${input:-}"; }
 timestamp() { date +"%Y%m%d-%H%M%S"; }
 
 json_escape() {
@@ -44,7 +44,9 @@ sh_single_quote() { printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"; }
 
 # Upsert export KEY='value' into an rc file (idempotent)
 upsert_export() {
-  local rcfile="$1" key="$2" val="$3"
+  local rcfile="${1:-}" key="${2:-}" val="${3:-}"
+  [ -z "$rcfile" ] && return 1
+  [ -z "$key" ] && return 1
   [ -z "$val" ] && return 0
   mkdir -p "$(dirname "$rcfile")"
   [ -f "$rcfile" ] || touch "$rcfile"
@@ -63,7 +65,8 @@ upsert_export() {
 
 # Read env value from runtime or rc files (best-effort)
 read_env_from_rcs() {
-  local key="$1" val=""
+  local key="${1:-}" val=""
+  [ -z "$key" ] && { printf "%s" ""; return 0; }
   val="$(printenv "$key" || true)"
   if [ -n "$val" ]; then printf "%s" "$val"; return 0; fi
   for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
@@ -104,19 +107,19 @@ KEPT_KEY=false
 
 select_site() {
   # Args: app_label base_suffix existing_base_url
-  local app_label="$1" base_suffix="$2" existing="$3"
+  local app_label="${1:-}" base_suffix="${2:-}" existing="${3:-}"
   local example_url="https://api.zetatechs.com${base_suffix}"
 
   echo
   echo "请选择 ${app_label} API 站点："
-  echo "  1) ZetaTechs API 主站:   $example_url"
+  echo "  1) ZetaTechs API 主站:   ${example_url}"
   echo "  2) ZetaTechs API 企业站: https://ent.zetatechs.com${base_suffix}"
   echo "  3) ZetaTechs API Codex站: https://codex.zetatechs.com${base_suffix}"
   echo "  4) 自定义: 手动输入 base_url（示例: ${example_url}）"
 
   local choice
-  if [ -n "$existing" ]; then
-    echo "提示：按 Enter 保持不变（当前: $existing）"
+  if [ -n "${existing:-}" ]; then
+    echo "提示：按 Enter 保持不变（当前: ${existing}）"
     choice="$(read_tty "输入选项 [1/2/3/4]，或直接回车保持不变: ")"
   else
     choice="$(read_tty "输入选项 [1/2/3/4] (默认 1): ")"
@@ -125,10 +128,10 @@ select_site() {
 
   KEPT_BASE=false
   if [ -z "$choice" ]; then
-    if [ -n "$existing" ]; then
+    if [ -n "${existing:-}" ]; then
       KEPT_BASE=true
-      NEW_BASE_URL="$existing"
-      local host; host="$(extract_host "$existing")"
+      NEW_BASE_URL="${existing}"
+      local host; host="$(extract_host "${existing}")"
       if [ -n "$host" ]; then TOKEN_URL="https://${host}/console/token"; else TOKEN_URL=""; fi
       SITE_NAME="保持不变"
       return 0
@@ -139,9 +142,9 @@ select_site() {
 
   local host=""
   case "$choice" in
-    1) host="api.zetatechs.com"; SITE_NAME="ZetaTechs API 主站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
-    2) host="ent.zetatechs.com"; SITE_NAME="ZetaTechs API 企业站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
-    3) host="codex.zetatechs.com"; SITE_NAME="ZetaTechs API Codex站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
+    1) host="api.zetatechs.com"; SITE_NAME="主站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
+    2) host="ent.zetatechs.com"; SITE_NAME="企业站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
+    3) host="codex.zetatechs.com"; SITE_NAME="Codex站"; NEW_BASE_URL="https://${host}${base_suffix}" ;;
     4)
       SITE_NAME="自定义"
       echo
@@ -169,7 +172,7 @@ select_site() {
 
 prompt_api_key() {
   # Args: key_label existing_key token_url
-  local key_label="$1" existing="$2" token_url="$3"
+  local key_label="${1:-}" existing="${2:-}" token_url="${3:-}"
   echo
   if [ -n "$token_url" ]; then
     echo "请在浏览器中获取你的 ${key_label}："
@@ -179,7 +182,7 @@ prompt_api_key() {
   fi
 
   local input=""
-  if [ -n "$existing" ]; then
+  if [ -n "${existing:-}" ]; then
     input="$(read_secret_tty "粘贴你的 ${key_label}（直接回车保持不变），输入隐藏: ")"
   else
     input="$(read_secret_tty "粘贴你的 ${key_label}，然后按 Enter（输入隐藏）: ")"
@@ -190,7 +193,7 @@ prompt_api_key() {
 
   KEPT_KEY=false
   if [ -z "$input" ]; then
-    if [ -n "$existing" ]; then
+    if [ -n "${existing:-}" ]; then
       KEPT_KEY=true
       NEW_API_KEY="$existing"
     else
@@ -407,6 +410,7 @@ setup_anthropic() {
   existing_base="$(read_env_from_rcs "ANTHROPIC_BASE_URL")"
   existing_key="$(read_env_from_rcs "ANTHROPIC_AUTH_TOKEN")"
 
+  # Anthropic 默认不加 /v1，若你需要可手动自定义选择 4
   select_site "Anthropic Claude Code CLI" "" "$existing_base"
   prompt_api_key "ANTHROPIC_AUTH_TOKEN" "$existing_key" "$TOKEN_URL"
 
