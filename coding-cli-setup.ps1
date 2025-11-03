@@ -113,8 +113,9 @@ function New-Model([string]$name,[string]$model,[string]$base,[string]$key) {
 function Setup-Factory() {
   Write-Host
   Write-Host '=== 配置 Factory Droid CLI (~/.factory/config.json) ==='
-  $home = $HOME; if (-not $home) { $home = [Environment]::GetFolderPath('UserProfile') }
-  $dir = Join-Path $home '.factory'
+  $userProfile = [Environment]::GetFolderPath('UserProfile')
+  if (-not $userProfile) { $userProfile = $env:USERPROFILE }
+  $dir = Join-Path $userProfile '.factory'
   $cfg = Join-Path $dir 'config.json'
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
