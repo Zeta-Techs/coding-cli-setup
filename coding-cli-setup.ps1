@@ -159,6 +159,8 @@ function Setup-Factory() {
     Copy-Item -LiteralPath $cfg -Destination "$cfg.bak.$(Timestamp)" -Force
   }
   $json = $outObj | ConvertTo-Json -Depth 6
+  # Normalize spacing to match official sample style: exactly one space after colon
+  $json = [Regex]::Replace($json, '"\:\s{2,}', '": ')
   # Write JSON as UTF-8 without BOM to avoid parsers rejecting BOM-prefixed files
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
   [System.IO.File]::WriteAllText($cfg, $json, $utf8NoBom)
