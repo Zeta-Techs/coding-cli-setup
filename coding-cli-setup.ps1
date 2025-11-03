@@ -30,6 +30,16 @@ function Read-Secret([string]$prompt) {
   try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
+function Json-Escape([string]$s) {
+  if ($null -eq $s) { return '' }
+  $s = $s -replace '\\', '\\\\'
+  $s = $s -replace '"', '\\"'
+  $s = $s -replace "`r", '\\r'
+  $s = $s -replace "`n", '\\n'
+  $s = $s -replace "`t", '\\t'
+  return $s
+}
+
 function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBase) {
   $example = "https://api.zetatechs.com$BaseSuffix"
   Write-Host
@@ -138,28 +148,66 @@ function Setup-Factory() {
   $baseToWrite = if ($sel.KeptBase) { $existingBase } else { $sel.BaseUrl }
   $keyToWrite  = if ($keyRes.KeptKey) { $existingKey } else { $keyRes.Value }
 
-  $models = @(
-    New-Model 'GPT-5 [Zeta]' 'gpt-5' $baseToWrite $keyToWrite
-    New-Model 'GPT-5 High [Zeta]' 'gpt-5-high' $baseToWrite $keyToWrite
-    New-Model 'GPT-5-Codex [Zeta]' 'gpt-5-codex' $baseToWrite $keyToWrite
-    New-Model 'GPT-5-Codex High [Zeta]' 'gpt-5-codex-high' $baseToWrite $keyToWrite
-    New-Model 'GPT-5-mini [Zeta]' 'gpt-5-mini' $baseToWrite $keyToWrite
-    New-Model 'GPT-5-mini High [Zeta]' 'gpt-5-mini-high' $baseToWrite $keyToWrite
-  )
-
-  $outObj = $null
-  if ($obj) {
-    $obj.custom_models = $models
-    $outObj = $obj
-  } else {
-    $outObj = [ordered]@{ custom_models = $models }
-  }
-
   if (Test-Path -LiteralPath $cfg) {
     Copy-Item -LiteralPath $cfg -Destination "$cfg.bak.$(Timestamp)" -Force
   }
-  $json = $outObj | ConvertTo-Json -Depth 6
-  # Normalize spacing to match official sample style: exactly one space after colon
+  $be = Json-Escape $baseToWrite
+  $ke = Json-Escape $keyToWrite
+  $json = @"
+{
+  "custom_models": [
+    {
+      "model_display_name": "GPT-5 [Zeta]",
+      "model": "gpt-5",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    },
+    {
+      "model_display_name": "GPT-5 High [Zeta]",
+      "model": "gpt-5-high",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    },
+    {
+      "model_display_name": "GPT-5-Codex [Zeta]",
+      "model": "gpt-5-codex",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    },
+    {
+      "model_display_name": "GPT-5-Codex High [Zeta]",
+      "model": "gpt-5-codex-high",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    },
+    {
+      "model_display_name": "GPT-5-mini [Zeta]",
+      "model": "gpt-5-mini",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    },
+    {
+      "model_display_name": "GPT-5-mini High [Zeta]",
+      "model": "gpt-5-mini-high",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "openai",
+      "max_tokens": 128000
+    }
+  ]
+}
+"@
+  # Write JSON as UTF-8 without BOM to avoid parsers rejecting BOM-prefixed files
   $json = [Regex]::Replace($json, '"\:\s{2,}', '": ')
   # Write JSON as UTF-8 without BOM to avoid parsers rejecting BOM-prefixed files
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
