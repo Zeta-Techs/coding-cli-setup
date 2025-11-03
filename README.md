@@ -40,7 +40,7 @@
 
 - 一行命令在线运行：
   ```powershell
-  iex (irm 'https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/test/coding-cli-setup.ps1')
+  iex (irm 'https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.ps1')
   ```
 
 ## 常见问题
