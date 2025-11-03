@@ -159,7 +159,9 @@ function Setup-Factory() {
     Copy-Item -LiteralPath $cfg -Destination "$cfg.bak.$(Timestamp)" -Force
   }
   $json = $outObj | ConvertTo-Json -Depth 6
-  $json | Out-File -FilePath $cfg -Encoding UTF8 -Force
+  # Write JSON as UTF-8 without BOM to avoid parsers rejecting BOM-prefixed files
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($cfg, $json, $utf8NoBom)
 
   Write-Host "✅ Factory Droid CLI 已配置: $cfg"
   if ($sel.KeptBase) { Write-Host "  base_url: 保持不变 ($existingBase)" } else { Write-Host "  base_url: $baseToWrite ($($sel.SiteName))" }
