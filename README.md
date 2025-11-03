@@ -18,6 +18,8 @@
 - 避免把 Key 写入到仓库，所有密钥仅落盘到用户目录（权限 600）
 
 ## 安装与使用
+
+### MacOS、Linux、WSL
 - 下载脚本并执行：
   ```
   curl -fsSL https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.sh | bash
