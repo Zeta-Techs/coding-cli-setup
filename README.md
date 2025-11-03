@@ -33,7 +33,7 @@
   - OpenAI Codex CLI: 配置在 ~/.codex/config.toml，密钥在 ~/.codex/auth.json
   - Anthropic CLI: 环境变量写入 ~/.bashrc 与 ~/.zshrc（需要 source 生效）
 
-### Windows 使用（PowerShell）
+### Windows (使用PowerShell)
 - 本仓库提供 `coding-cli-setup.ps1`，用于在 Windows 上：
   - 设置 Anthropic Claude Code 所需用户级环境变量：`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`；
   - 写入 Factory Droid CLI 配置：`%USERPROFILE%\.factory\config.json`（存在则自动备份）。
