@@ -19,6 +19,14 @@
 
 ## 安装与使用
 
+### 图文教程
+
+- Droid CLI：[https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
+
+- Claude Code：[https://docs.zetatechs.com/apps/programming-tools/claude-code/#4-claude-code](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
+
+- Codex CLI：[https://docs.zetatechs.com/apps/programming-tools/codex-cli/](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
+
 ### MacOS、Linux、WSL
 - 下载脚本并执行：
   ```
