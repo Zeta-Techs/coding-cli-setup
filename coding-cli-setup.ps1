@@ -46,20 +46,20 @@ function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBa
     if (-not $choice) {
       $kept = $true
       $base = $ExistingBase
-      $host = Extract-Host $base
-      $token = if ($host) { "https://$host/console/token" } else { '' }
+      $apiHost = Extract-Host $base
+      $token = if ($apiHost) { "https://$apiHost/console/token" } else { '' }
       return [pscustomobject]@{ BaseUrl=$base; TokenUrl=$token; KeptBase=$true; SiteName='保持不变' }
     }
   } else {
     $choice = Read-Trim "输入选项 [1/2/3/4] (默认 1):" '1'
   }
 
-  $host = ''
+  $apiHost = ''
   $siteName = ''
   switch ($choice) {
-    '1' { $host='api.zetatechs.com'; $siteName='主站' }
-    '2' { $host='ent.zetatechs.com'; $siteName='企业站' }
-    '3' { $host='codex.zetatechs.com'; $siteName='Codex站' }
+    '1' { $apiHost='api.zetatechs.com'; $siteName='主站' }
+    '2' { $apiHost='ent.zetatechs.com'; $siteName='企业站' }
+    '3' { $apiHost='codex.zetatechs.com'; $siteName='Codex站' }
     '4' {
       $siteName='自定义'
       Write-Host
@@ -68,15 +68,15 @@ function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBa
       $custom = Read-Trim "自定义 base_url:" ''
       if (-not $custom) { throw 'base_url 不能为空' }
       $base = Ensure-Scheme $custom
-      $host = Extract-Host $base
-      $token = if ($host) { "https://$host/console/token" } else { '' }
+      $apiHost = Extract-Host $base
+      $token = if ($apiHost) { "https://$apiHost/console/token" } else { '' }
       return [pscustomobject]@{ BaseUrl=$base; TokenUrl=$token; KeptBase=$false; SiteName=$siteName }
     }
     Default { throw "无效选项：$choice" }
   }
 
-  $baseUrl = "https://$host$BaseSuffix"
-  $tokenUrl = "https://$host/console/token"
+  $baseUrl = "https://$apiHost$BaseSuffix"
+  $tokenUrl = "https://$apiHost/console/token"
   [pscustomobject]@{ BaseUrl=$baseUrl; TokenUrl=$tokenUrl; KeptBase=$false; SiteName=$siteName }
 }
 
