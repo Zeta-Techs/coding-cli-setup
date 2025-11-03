@@ -31,6 +31,28 @@
   - OpenAI Codex CLI: 配置在 ~/.codex/config.toml，密钥在 ~/.codex/auth.json
   - Anthropic CLI: 环境变量写入 ~/.bashrc 与 ~/.zshrc（需要 source 生效）
 
+### Windows 使用（PowerShell）
+- 本仓库提供 `coding-cli-setup.ps1`，用于在 Windows 上：
+  - 设置 Anthropic Claude Code 所需用户级环境变量：`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`；
+  - 写入 Factory Droid CLI 配置：`%USERPROFILE%\.factory\config.json`（存在则自动备份）。
+
+- 本地运行（推荐）：
+  1. 打开 PowerShell，进入仓库目录。
+  2. 可选：临时放行脚本执行（仅当前会话）：
+     ```powershell
+     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+     ```
+  3. 执行脚本：
+     ```powershell
+     .\coding-cli-setup.ps1
+     ```
+  4. 按提示完成站点与 Key 的输入；完成后重开终端或直接使用当前会话（脚本已为当前会话同步设置变量）。
+
+- 一行命令在线运行（按需）：
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.ps1)"
+  ```
+
 ## 常见问题
 - JSON 解析错误
   - 用 jq 验证：jq . ~/.factory/config.json
