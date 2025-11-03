@@ -27,7 +27,7 @@
 - 按提示选择要配置的应用（1/2/3）。
 - 选择站点时提供 4 个选项：
   - 1/2/3 为预设站点。
-  - 4 自定义时，脚本会展示示例：例如 https://api.zetatechs.com/v1，随后会提示你输入 API Key。
+  - 4 自定义时，脚本会展示示例：例如`https://api.zetatechs.com/v1`，随后会提示你输入 API Key。
 - 运行结束后：
   - Factory Droid CLI: 配置保存在 ~/.factory/config.json
   - OpenAI Codex CLI: 配置在 ~/.codex/config.toml，密钥在 ~/.codex/auth.json
