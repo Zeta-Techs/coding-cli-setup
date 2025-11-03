@@ -87,11 +87,13 @@ function Prompt-ApiKey([string]$KeyLabel, [string]$Existing, [string]$TokenUrl) 
 
   if ($Existing) {
     $input = Read-Secret "粘贴你的 $KeyLabel（直接回车保持不变），输入隐藏: "
-    $input = ($input ?? '').Trim().Replace("`r",'').Replace("`n",'')
+    if ($null -eq $input) { $input = '' }
+    $input = $input.Trim().Replace("`r",'').Replace("`n",'')
     if (-not $input) { return [pscustomobject]@{ KeptKey=$true; Value=$Existing } }
   } else {
     $input = Read-Secret "粘贴你的 $KeyLabel，然后按 Enter（输入隐藏）: "
-    $input = ($input ?? '').Trim().Replace("`r",'').Replace("`n",'')
+    if ($null -eq $input) { $input = '' }
+    $input = $input.Trim().Replace("`r",'').Replace("`n",'')
     if (-not $input) { throw "$KeyLabel 不能为空" }
   }
   [pscustomobject]@{ KeptKey=$false; Value=$input }
@@ -118,6 +120,7 @@ function Setup-Factory() {
 
   $existingBase = ''
   $existingKey = ''
+  $obj = $null
   if (Test-Path -LiteralPath $cfg) {
     try {
       $obj = Get-Content -Raw -LiteralPath $cfg | ConvertFrom-Json -ErrorAction Stop
