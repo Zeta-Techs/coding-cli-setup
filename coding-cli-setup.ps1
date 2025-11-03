@@ -42,7 +42,7 @@ function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBa
   $choice = ''
   $kept = $false
   if ($ExistingBase) {
-    $choice = Read-Trim "输入选项 [1/2/3/4]，或直接回车保持不变:" ''
+    $choice = Read-Trim "输入选项 [1/2/3/4]，或直接回车保持不变" ''
     if (-not $choice) {
       $kept = $true
       $base = $ExistingBase
@@ -51,7 +51,7 @@ function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBa
       return [pscustomobject]@{ BaseUrl=$base; TokenUrl=$token; KeptBase=$true; SiteName='保持不变' }
     }
   } else {
-    $choice = Read-Trim "输入选项 [1/2/3/4] (默认 1):" '1'
+    $choice = Read-Trim "输入选项 [1/2/3/4] (默认 1)" '1'
   }
 
   $apiHost = ''
@@ -65,7 +65,7 @@ function Select-Site([string]$AppLabel, [string]$BaseSuffix, [string]$ExistingBa
       Write-Host
       Write-Host "请输入完整 base_url（以 http(s):// 开头）。"
       Write-Host "示例: $example"
-      $custom = Read-Trim "自定义 base_url:" ''
+      $custom = Read-Trim "自定义 base_url" ''
       if (-not $custom) { throw 'base_url 不能为空' }
       $base = Ensure-Scheme $custom
       $apiHost = Extract-Host $base
@@ -86,12 +86,12 @@ function Prompt-ApiKey([string]$KeyLabel, [string]$Existing, [string]$TokenUrl) 
   else { Write-Host "请在浏览器中获取你的 $KeyLabel（站点未知或保持不变）。" }
 
   if ($Existing) {
-    $input = Read-Secret "粘贴你的 $KeyLabel（直接回车保持不变），输入隐藏: "
+    $input = Read-Secret "粘贴你的 $KeyLabel（直接回车保持不变，输入隐藏）"
     if ($null -eq $input) { $input = '' }
     $input = $input.Trim().Replace("`r",'').Replace("`n",'')
     if (-not $input) { return [pscustomobject]@{ KeptKey=$true; Value=$Existing } }
   } else {
-    $input = Read-Secret "粘贴你的 $KeyLabel，然后按 Enter（输入隐藏）: "
+    $input = Read-Secret "粘贴你的 $KeyLabel，然后按 Enter（输入隐藏）"
     if ($null -eq $input) { $input = '' }
     $input = $input.Trim().Replace("`r",'').Replace("`n",'')
     if (-not $input) { throw "$KeyLabel 不能为空" }
@@ -197,7 +197,7 @@ Write-Host '请选择要配置的应用：'
 Write-Host '  1) Factory Droid CLI'
 Write-Host '  2) Anthropic Claude Code CLI'
 
-$choice = Read-Trim '输入选项 [1/2] (默认 1):' '1'
+$choice = Read-Trim '输入选项 [1/2] (默认 1)' '1'
 switch ($choice) {
   '1' { Setup-Factory }
   '2' { Setup-Anthropic }
