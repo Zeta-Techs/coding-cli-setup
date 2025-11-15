@@ -157,32 +157,32 @@ function Setup-Factory() {
 {
   "custom_models": [
     {
-      "model_display_name": "GPT-5 [Zeta]",
-      "model": "gpt-5",
+      "model_display_name": "GPT-5.1 [Zeta]",
+      "model": "gpt-5.1",
       "base_url": "$be",
       "api_key": "$ke",
       "provider": "openai",
       "max_tokens": 128000
     },
     {
-      "model_display_name": "GPT-5 High [Zeta]",
-      "model": "gpt-5-high",
+      "model_display_name": "GPT-5.1 High [Zeta]",
+      "model": "gpt-5.1-high",
       "base_url": "$be",
       "api_key": "$ke",
       "provider": "openai",
       "max_tokens": 128000
     },
     {
-      "model_display_name": "GPT-5-Codex [Zeta]",
-      "model": "gpt-5-codex",
+      "model_display_name": "GPT-5.1-Codex [Zeta]",
+      "model": "gpt-5.1-codex",
       "base_url": "$be",
       "api_key": "$ke",
       "provider": "openai",
       "max_tokens": 128000
     },
     {
-      "model_display_name": "GPT-5-Codex High [Zeta]",
-      "model": "gpt-5-codex-high",
+      "model_display_name": "GPT-5.1-Codex Mini [Zeta]",
+      "model": "gpt-5-codex-mini",
       "base_url": "$be",
       "api_key": "$ke",
       "provider": "openai",
