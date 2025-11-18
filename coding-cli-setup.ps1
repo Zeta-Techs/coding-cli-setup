@@ -204,7 +204,15 @@ function Setup-Factory() {
       "provider": "openai",
       "max_tokens": 128000
     }
-  ]
+    },
+    {
+      "model_display_name": "Gemini-3 Preview [Zeta]",
+      "model": "gemini-3-pro-preview",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "generic-chat-completion-api",
+      "max_tokens": 65500
+    }
 }
 "@
   # Write JSON as UTF-8 without BOM to avoid parsers rejecting BOM-prefixed files

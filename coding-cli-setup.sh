@@ -304,10 +304,19 @@ setup_factory() {
     {
       "model_display_name": "GPT-5-mini High [Zeta]",
       "model": "gpt-5-mini-high",
-      "base_url": "$base_json",
-      "api_key": "$key_json",
+      "base_url": "$be",
+      "api_key": "$ke",
       "provider": "openai",
       "max_tokens": 128000
+    }
+    },
+    {
+      "model_display_name": "Gemini-3 Preview [Zeta]",
+      "model": "gemini-3-pro-preview",
+      "base_url": "$be",
+      "api_key": "$ke",
+      "provider": "generic-chat-completion-api",
+      "max_tokens": 65500
     }
   ]
 }
