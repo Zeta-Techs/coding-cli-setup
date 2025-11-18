@@ -315,7 +315,7 @@ setup_factory() {
       "base_url": "$be",
       "api_key": "$ke",
       "provider": "generic-chat-completion-api",
-      "max_tokens": 65500
+      "max_tokens": 60000
     }
   ]
 }
