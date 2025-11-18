@@ -308,7 +308,6 @@ setup_factory() {
       "api_key": "$ke",
       "provider": "openai",
       "max_tokens": 128000
-    }
     },
     {
       "model_display_name": "Gemini-3 Preview [Zeta]",
