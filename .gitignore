@@ -1,0 +1,5 @@
+# Local opencode workspace
+.opencode/
+
+# Local claude workspace
+.claude/

@@ -5,7 +5,9 @@
 #   1) Factory Droid CLI (~/.factory/config.json)
 #   2) OpenAI Codex CLI (~/.codex/config.toml + ~/.codex/auth.json)
 #   3) Anthropic Claude Code CLI (ANTHROPIC_* envs in ~/.bashrc / ~/.zshrc)
+#   4) OpenCode (opencode) CLI (~/.config/opencode/opencode.json)
 #
+
 # 站点选项（每个应用内均提供）：
 #   1) ZetaTechs API 主站:   https://api.zetatechs.com(/v1)
 #   2) ZetaTechs API 企业站: https://ent.zetatechs.com(/v1)
@@ -205,6 +207,379 @@ prompt_api_key() {
   fi
 }
 
+ensure_trailing_path() {
+  # Args: base_url desired_path
+  # Examples:
+  #   ensure_trailing_path "https://api.zetatechs.com" "/v1" -> https://api.zetatechs.com/v1
+  #   ensure_trailing_path "https://api.zetatechs.com/v1/" "/v1" -> https://api.zetatechs.com/v1
+  local base="${1:-}" desired="${2:-}"
+  base="$(trim "$base")"
+  desired="$(trim "$desired")"
+  [ -z "$base" ] && { printf "%s" ""; return 0; }
+  [ -z "$desired" ] && { printf "%s" "$base"; return 0; }
+
+  # Drop trailing slash from base
+  base="${base%/}"
+
+  # If base already ends with desired, keep as-is
+  case "$base" in
+    *"$desired") printf "%s" "$base" ;;
+    *) printf "%s%s" "$base" "$desired" ;;
+  esac
+}
+
+strip_opencode_known_suffix() {
+  # Remove a trailing /v1 or /v1beta (if present)
+  local base="${1:-}"
+  base="$(trim "$base")"
+  base="${base%/}"
+  case "$base" in
+    */v1beta) printf "%s" "${base%/v1beta}" ;;
+    */v1) printf "%s" "${base%/v1}" ;;
+    *) printf "%s" "$base" ;;
+  esac
+}
+
+read_opencode_provider_base() {
+  # Prompt for provider base name when using custom base URLs
+  local existing="${1:-}"
+  local val
+  echo
+  echo "你选择了自定义 base_url。OpenCode 需要一个 provider 名称前缀用于生成 provider id："
+  echo "  示例：my-zeta -> my-zeta-openai / my-zeta-claude / my-zeta-gemini"
+  if [ -n "$existing" ]; then
+    echo "提示：按 Enter 保持不变（当前: ${existing}）"
+    val="$(read_tty "请输入 provider 前缀（custom-name）: ")"
+    val="$(trim "$val")"
+    if [ -z "$val" ]; then printf "%s" "$existing"; return 0; fi
+  else
+    val="$(read_tty "请输入 provider 前缀（custom-name）: ")"
+    val="$(trim "$val")"
+    if [ -z "$val" ]; then
+      echo "ERROR: provider 前缀不能为空。" >&2
+      exit 1
+    fi
+  fi
+  printf "%s" "$val"
+}
+
+build_opencode_template() {
+  # Args: provider_base site_label base_v1 base_v1beta api_key
+  local pbase="${1:-}" site_label="${2:-}" base_v1="${3:-}" base_v1beta="${4:-}" api_key="${5:-}"
+
+  local openai_id="${pbase}-openai" claude_id="${pbase}-claude" gemini_id="${pbase}-gemini"
+  local api_key_json base_v1_json base_v1beta_json
+  api_key_json="$(json_escape "$api_key")"
+  base_v1_json="$(json_escape "$base_v1")"
+  base_v1beta_json="$(json_escape "$base_v1beta")"
+
+  cat <<EOF
+{
+  "\$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "${openai_id}": {
+      "npm": "@ai-sdk/openai",
+      "name": "${site_label} OpenAI",
+      "options": {
+        "baseURL": "${base_v1_json}",
+        "apiKey": "${api_key_json}"
+      },
+      "models": {
+        "gpt-5.2": {
+          "name": "GPT-5.2",
+          "options": {
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "minimal": { "reasoningEffort": "minimal", "textVerbosity": "low" },
+            "low": { "reasoningEffort": "low", "textVerbosity": "low" },
+            "medium": { "reasoningEffort": "medium", "textVerbosity": "medium" },
+            "high": { "reasoningEffort": "high", "textVerbosity": "high" },
+            "xhigh": { "reasoningEffort": "xhigh", "textVerbosity": "high" }
+          }
+        },
+        "gpt-5.2-codex": {
+          "name": "GPT-5.2-Codex",
+          "options": {
+            "reasoningSummary": "auto",
+            "textVerbosity": "medium",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        },
+        "gpt-5.1": {
+          "name": "GPT-5.1",
+          "options": {
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "none": { "reasoningEffort": "none", "textVerbosity": "low" },
+            "minimal": { "reasoningEffort": "minimal", "textVerbosity": "low" },
+            "low": { "reasoningEffort": "low", "textVerbosity": "low" },
+            "medium": { "reasoningEffort": "medium", "textVerbosity": "medium" },
+            "high": { "reasoningEffort": "high", "textVerbosity": "high" },
+            "xhigh": { "reasoningEffort": "xhigh", "textVerbosity": "high" }
+          }
+        },
+        "gpt-5.1-codex-max": {
+          "name": "GPT-5.1-Codex-Max",
+          "options": {
+            "reasoningSummary": "auto",
+            "textVerbosity": "medium",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" }
+          }
+        },
+        "gpt-5.1-codex": {
+          "name": "GPT-5.1-Codex",
+          "options": {
+            "reasoningSummary": "auto",
+            "textVerbosity": "medium",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" }
+          }
+        },
+        "gpt-5.1-codex-mini": {
+          "name": "GPT-5.1-Codex-Mini",
+          "options": {
+            "reasoningSummary": "auto",
+            "textVerbosity": "medium",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" }
+          }
+        },
+        "gpt-5": {
+          "name": "GPT-5",
+          "options": {
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "minimal": { "reasoningEffort": "minimal", "textVerbosity": "low" },
+            "low": { "reasoningEffort": "low", "textVerbosity": "low" },
+            "medium": { "reasoningEffort": "medium", "textVerbosity": "medium" },
+            "high": { "reasoningEffort": "high", "textVerbosity": "high" }
+          }
+        },
+        "gpt-5-codex": {
+          "name": "GPT-5-Codex",
+          "options": {
+            "reasoningSummary": "auto",
+            "textVerbosity": "medium",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" }
+          }
+        }
+      }
+    },
+
+    "${claude_id}": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "${site_label} Claude",
+      "options": {
+        "baseURL": "${base_v1_json}",
+        "apiKey": "${api_key_json}"
+      },
+      "models": {
+        "claude-haiku-4-5-20251001": { "name": "Claude-Haiku-4-5-20251001" },
+        "claude-opus-4-5-20251101": { "name": "Claude-Opus-4-5-20251101" },
+        "claude-opus-4-5-20251101-thinking": { "name": "Claude-Opus-4-5-20251101-thinking" },
+        "claude-sonnet-4-5-20250929": { "name": "Claude-Sonnet-4-5-20250929" },
+        "claude-sonnet-4-5-20250929-thinking": { "name": "Claude-Sonnet-4-5-20250929-thinking" }
+      }
+    },
+
+    "${gemini_id}": {
+      "npm": "@ai-sdk/google",
+      "name": "${site_label} Gemini",
+      "options": {
+        "baseURL": "${base_v1beta_json}",
+        "apiKey": "${api_key_json}"
+      },
+      "models": {
+        "gemini-3-pro-preview": { "name": "Gemini 3 Pro Preview" },
+        "gemini-3-flash-preview": { "name": "Gemini 3 Flash Preview" }
+      }
+    }
+  }
+}
+EOF
+}
+
+upsert_opencode_provider_keys_jq() {
+  # Args: cfg provider_id base_url api_key
+  local cfg="${1:-}" pid="${2:-}" base="${3:-}" key="${4:-}"
+  local tmp
+  tmp="$(mktemp)"
+  jq --arg pid "$pid" --arg base "$base" --arg key "$key" '
+    .provider = (.provider // {})
+    | .provider[$pid] = (.provider[$pid] // {})
+    | .provider[$pid].options = (.provider[$pid].options // {})
+    | .provider[$pid].options.baseURL = $base
+    | .provider[$pid].options.apiKey = $key
+  ' "$cfg" > "$tmp"
+  cp "$cfg" "$cfg.bak.$(timestamp)" || true
+  mv "$tmp" "$cfg"
+}
+
+upsert_opencode_provider_keys_fallback() {
+  # Minimal fallback that rewrites the file using the full template.
+  # This is only used when jq is missing AND we cannot safely parse/patch.
+  # Args: cfg provider_base site_label base_v1 base_v1beta api_key
+  local cfg="${1:-}" pbase="${2:-}" site_label="${3:-}" base_v1="${4:-}" base_v1beta="${5:-}" api_key="${6:-}"
+  [ -f "$cfg" ] && cp "$cfg" "$cfg.bak.$(timestamp)" || true
+  build_opencode_template "$pbase" "$site_label" "$base_v1" "$base_v1beta" "$api_key" > "$cfg"
+}
+
+setup_opencode() {
+  echo
+  echo "=== 配置 OpenCode (opencode) (~/.config/opencode/opencode.json) ==="
+
+  local OPENCODE_DIR="$HOME/.config/opencode"
+  local OPENCODE_CFG="$OPENCODE_DIR/opencode.json"
+  mkdir -p "$OPENCODE_DIR"
+
+  # Try to infer existing provider base + baseURL + apiKey.
+  # Prefer known provider ids; otherwise fall back to any provider ending with "-openai".
+  local existing_base_v1="" existing_key="" existing_provider_base=""
+  local known_id_main_openai="zetatechs-api-openai"
+  local known_id_ent_openai="zetatechs-api-enterprise-openai"
+
+  if [ -f "$OPENCODE_CFG" ] && has_cmd jq && jq -e . "$OPENCODE_CFG" >/dev/null 2>&1; then
+    local existing_openai_id=""
+
+    existing_base_v1="$(jq -r --arg id "$known_id_main_openai" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
+    if [ -n "$existing_base_v1" ]; then
+      existing_openai_id="$known_id_main_openai"
+      existing_key="$(jq -r --arg id "$known_id_main_openai" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
+    else
+      existing_base_v1="$(jq -r --arg id "$known_id_ent_openai" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
+      if [ -n "$existing_base_v1" ]; then
+        existing_openai_id="$known_id_ent_openai"
+        existing_key="$(jq -r --arg id "$known_id_ent_openai" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
+      fi
+    fi
+
+    if [ -z "$existing_openai_id" ]; then
+      existing_openai_id="$(jq -r '.provider | keys[]? | select(test("-openai$"))' "$OPENCODE_CFG" 2>/dev/null | head -n1 || true)"
+      if [ -n "$existing_openai_id" ]; then
+        existing_base_v1="$(jq -r --arg id "$existing_openai_id" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
+        existing_key="$(jq -r --arg id "$existing_openai_id" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
+      fi
+    fi
+
+    if [ -n "$existing_openai_id" ]; then
+      existing_provider_base="${existing_openai_id%-openai}"
+    fi
+  fi
+
+  # For OpenCode, the selected site defines baseURL endings:
+  # - OpenAI/Claude: /v1
+  # - Gemini: /v1beta
+  # We prompt once and derive both URLs.
+  local existing_site_hint
+  existing_site_hint="$(strip_opencode_known_suffix "$existing_base_v1")"
+  select_site "OpenCode (opencode)" "" "$existing_site_hint"
+  local selected_site_name="$SITE_NAME"
+
+  # Derive /v1 and /v1beta from selected base.
+  local selected_base_raw
+  if [ "$KEPT_BASE" = true ]; then
+    # existing_base_v1 might already include /v1
+    selected_base_raw="$existing_base_v1"
+    if [ -z "$selected_base_raw" ]; then
+      selected_base_raw="$NEW_BASE_URL"
+    fi
+  else
+    selected_base_raw="$NEW_BASE_URL"
+  fi
+
+  local base_root base_v1 base_v1beta
+  base_root="$(strip_opencode_known_suffix "$selected_base_raw")"
+  base_v1="$(ensure_trailing_path "$base_root" "/v1")"
+  base_v1beta="$(ensure_trailing_path "$base_root" "/v1beta")"
+
+  # Provider base name
+  local provider_base=""
+  if [ "$selected_site_name" = "主站" ]; then
+    provider_base="zetatechs-api"
+  elif [ "$selected_site_name" = "企业站" ]; then
+    provider_base="zetatechs-api-enterprise"
+  elif [ "$selected_site_name" = "保持不变" ] && [ -n "$existing_provider_base" ]; then
+    provider_base="$existing_provider_base"
+  else
+    # For Codex站 and for custom base URL, ask for name
+    provider_base="$(read_opencode_provider_base "$existing_provider_base")"
+  fi
+
+  local site_label="ZetaTechs ${selected_site_name}"
+  if [ "$selected_site_name" = "保持不变" ]; then
+    if [ -n "$existing_site_hint" ]; then
+      site_label="ZetaTechs ${existing_site_hint}"
+    else
+      site_label="ZetaTechs"
+    fi
+  fi
+
+  # Token prompt + key
+  prompt_api_key "OPENAI_API_KEY" "$existing_key" "$TOKEN_URL"
+
+  local key_to_write
+  if [ "$KEPT_KEY" = true ]; then key_to_write="$existing_key"; else key_to_write="$NEW_API_KEY"; fi
+
+  # If file missing, always create full template
+  if [ ! -f "$OPENCODE_CFG" ]; then
+    build_opencode_template "$provider_base" "$site_label" "$base_v1" "$base_v1beta" "$key_to_write" > "$OPENCODE_CFG"
+  else
+    if has_cmd jq && jq -e . "$OPENCODE_CFG" >/dev/null 2>&1; then
+      local openai_id="${provider_base}-openai"
+      local claude_id="${provider_base}-claude"
+      local gemini_id="${provider_base}-gemini"
+      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$openai_id" "$base_v1" "$key_to_write"
+      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$claude_id" "$base_v1" "$key_to_write"
+      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$gemini_id" "$base_v1beta" "$key_to_write"
+    else
+      echo "注意：未检测到 jq 或现有 JSON 非法，将覆盖 $OPENCODE_CFG（已创建备份）。"
+      upsert_opencode_provider_keys_fallback "$OPENCODE_CFG" "$provider_base" "$site_label" "$base_v1" "$base_v1beta" "$key_to_write"
+    fi
+  fi
+
+  chmod 700 "$OPENCODE_DIR" || true
+  chmod 600 "$OPENCODE_CFG" || true
+
+  echo "✅ OpenCode (opencode) 已配置："
+  echo "  配置文件: $OPENCODE_CFG"
+  echo "  provider 前缀: ${provider_base}"
+  echo "  baseURL (OpenAI/Claude): $base_v1"
+  echo "  baseURL (Gemini): $base_v1beta"
+  echo "  provider name 前缀: ${site_label}"
+  if [ "$KEPT_KEY" = true ]; then echo "  API Key: 保持不变"; else echo "  API Key: 已更新"; fi
+}
+
+
 # -------- Factory Droid CLI --------
 setup_factory() {
   echo
@@ -304,19 +679,20 @@ setup_factory() {
     {
       "model_display_name": "GPT-5-mini High [Zeta]",
       "model": "gpt-5-mini-high",
-      "base_url": "$be",
-      "api_key": "$ke",
+      "base_url": "$base_json",
+      "api_key": "$key_json",
       "provider": "openai",
       "max_tokens": 128000
     },
     {
       "model_display_name": "Gemini-3 Preview [Zeta]",
       "model": "gemini-3-pro-preview",
-      "base_url": "$be",
-      "api_key": "$ke",
+      "base_url": "$base_json",
+      "api_key": "$key_json",
       "provider": "generic-chat-completion-api",
       "max_tokens": 60000
     }
+
   ]
 }
 EOF
@@ -444,20 +820,23 @@ setup_anthropic() {
 # -------- Main --------
 echo "=== Zetatechs Coding CLI 配置向导 ==="
 echo
-echo "请选择要配置的应用："
-echo "  1) Factory Droid CLI"
-echo "  2) OpenAI Codex CLI"
-echo "  3) Anthropic Claude Code CLI"
+  echo "请选择要配置的应用："
+  echo "  1) Factory Droid CLI"
+  echo "  2) OpenAI Codex CLI"
+  echo "  3) Anthropic Claude Code CLI"
+  echo "  4) OpenCode (opencode)"
 
-app_choice="$(read_tty "输入选项 [1/2/3] (默认 1): ")"
-app_choice="${app_choice:-1}"
+  app_choice="$(read_tty "输入选项 [1/2/3/4] (默认 1): ")"
+  app_choice="${app_choice:-1}"
 
-case "$app_choice" in
-  1) setup_factory ;;
-  2) setup_codex ;;
-  3) setup_anthropic ;;
-  *) echo "无效选项：$app_choice" >&2; exit 1 ;;
-esac
+  case "$app_choice" in
+    1) setup_factory ;;
+    2) setup_codex ;;
+    3) setup_anthropic ;;
+    4) setup_opencode ;;
+    *) echo "无效选项：$app_choice" >&2; exit 1 ;;
+  esac
+
 
 echo
 echo "完成。再次运行本脚本时："
