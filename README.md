@@ -1,9 +1,10 @@
 # ZetaTechs Coding CLI Setup
 
-一个用于快速配置三类 Coding CLI 的交互式脚本（MIT License）：
+一个用于快速配置四类 Coding CLI 的交互式脚本（MIT License，4 tools）：
 - Factory Droid CLI（~/.factory/config.json）
 - OpenAI Codex CLI（~/.codex/config.toml 与 ~/.codex/auth.json）
 - Anthropic Claude Code CLI（写入环境变量到 ~/.bashrc / ~/.zshrc）
+- OpenCode (opencode)（~/.config/opencode/opencode.json）
 
 脚本会引导你选择 API 站点并输入 API Key，写入各工具的配置位置；如再次运行且不做选择/输入，将保留原配置不变。
 
@@ -23,16 +24,18 @@
 
 - Droid CLI：[https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
 
-- Claude Code：[https://docs.zetatechs.com/apps/programming-tools/claude-code/](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
+- Claude Code：[https://docs.zetatechs.com/apps/programming-tools/claude-code/](https://docs.zetatechs.com/apps/programming-tools/claude-code/)
 
-- Codex CLI：[https://docs.zetatechs.com/apps/programming-tools/codex-cli/](https://docs.zetatechs.com/apps/programming-tools/factory-droid-cli/)
+- Codex CLI：[https://docs.zetatechs.com/apps/programming-tools/codex-cli/](https://docs.zetatechs.com/apps/programming-tools/codex-cli/)
+
+- OpenCode (opencode)：https://opencode.ai (Config schema: https://opencode.ai/config.json)
 
 ### MacOS、Linux、WSL
 - 下载脚本并执行：
   ```
   curl -fsSL https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.sh | bash
   ```
-- 按提示选择要配置的应用（1/2/3）。
+- 按提示选择要配置的应用（1/2/3/4）。
 - 选择站点时提供 4 个选项：
   - 1/2/3 为预设站点。
   - 4 自定义时，脚本会展示示例：例如`https://api.zetatechs.com/v1`，随后会提示你输入 API Key。
@@ -40,16 +43,22 @@
   - Factory Droid CLI: 配置保存在 ~/.factory/config.json
   - OpenAI Codex CLI: 配置在 ~/.codex/config.toml，密钥在 ~/.codex/auth.json
   - Anthropic CLI: 环境变量写入 ~/.bashrc 与 ~/.zshrc（需要 source 生效）
+  - OpenCode (opencode): 配置在 ~/.config/opencode/opencode.json（OpenCode config）
 
 ### Windows (使用PowerShell)
 - 本仓库提供 `coding-cli-setup.ps1`，用于在 Windows 上：
   - 设置 Anthropic Claude Code 所需用户级环境变量：`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`；
   - 写入 Factory Droid CLI 配置：`%USERPROFILE%\.factory\config.json`（存在则自动备份）。
+  - 写入 OpenCode (opencode) 配置：`%USERPROFILE%\.config\opencode\opencode.json`（存在则自动备份；OpenCode config）。
 
 - 一行命令在线运行：
   ```powershell
   iex (irm 'https://raw.githubusercontent.com/Zeta-Techs/coding-cli-setup/main/coding-cli-setup.ps1')
   ```
+- 按提示选择要配置的应用（1/2/3）。
+  - 1: Factory Droid CLI
+  - 2: Anthropic Claude Code CLI
+  - 3: OpenCode (opencode)
 
 ## 常见问题
 - JSON 解析错误
