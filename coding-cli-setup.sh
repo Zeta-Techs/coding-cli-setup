@@ -25,8 +25,10 @@ set -Eeuo pipefail
 umask 077
 
 # Ensure interactive terminal when piped
-if ! [ -t 0 ] && ! [ -t 1 ] && ! [ -t 2 ]; then
-  echo "ERROR: No interactive terminal detected. Please run in a terminal." >&2
+# This script is intended to be safe for `curl | bash` usage, so interactive
+# input MUST be read from /dev/tty (not stdin).
+if ! [ -r /dev/tty ]; then
+  echo "ERROR: /dev/tty is not readable. Please run in a terminal." >&2
   exit 1
 fi
 
@@ -43,22 +45,13 @@ has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 read_tty() {
   local __p="${1:-}" input
-  # Read from /dev/tty when an interactive terminal exists (curl | bash safe)
-  if [ -t 1 ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
-    read -r -p "$__p" input < /dev/tty || true
-  else
-    read -r -p "$__p" input || true
-  fi
+  read -r -p "$__p" input < /dev/tty || true
   printf "%s" "${input:-}"
 }
 
 read_secret_tty() {
   local __p="${1:-}" input
-  if [ -t 1 ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
-    read -r -s -p "$__p" input < /dev/tty || true
-  else
-    read -r -s -p "$__p" input || true
-  fi
+  read -r -s -p "$__p" input < /dev/tty || true
   echo
   printf "%s" "${input:-}"
 }
