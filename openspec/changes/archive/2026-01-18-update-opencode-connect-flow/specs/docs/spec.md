@@ -1,8 +1,5 @@
-# docs Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change update-readme-opencode. Update Purpose after archive.
-## Requirements
 ### Requirement: Repository README Accuracy
 The repository SHALL provide a README that accurately describes the supported setup targets and the expected configuration file locations.
 
@@ -20,4 +17,3 @@ The repository SHALL provide a README that accurately describes the supported se
 - **WHEN** new README content is added for OpenCode
 - **THEN** the README remains Chinese-first
 - **AND THEN** it includes brief English clarifications for OpenCode-related additions
-

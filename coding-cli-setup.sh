@@ -2,21 +2,21 @@
 # SPDX-License-Identifier: MIT
 # coding-cli-setup.sh — Interactive setup for multiple coding CLIs on Linux/macOS
 # Supports:
-#   1) Factory Droid CLI (~/.factory/config.json)
+#   1) OpenCode CLI (~/.config/opencode/opencode.json)
 #   2) OpenAI Codex CLI (~/.codex/config.toml + ~/.codex/auth.json)
 #   3) Anthropic Claude Code CLI (ANTHROPIC_* envs in ~/.bashrc / ~/.zshrc)
-#   4) OpenCode (opencode) CLI (~/.config/opencode/opencode.json)
+#   4) Factory Droid CLI (~/.factory/config.json)
 #
 
 # 站点选项（每个应用内均提供）：
 #   1) ZetaTechs API 主站:   https://api.zetatechs.com(/v1)
 #   2) ZetaTechs API 企业站: https://ent.zetatechs.com(/v1)
 #   3) ZetaTechs API Codex站: https://codex.zetatechs.com(/v1)
-#   4) 自定义: 手动输入 base_url（会给出 1 号站点作为格式示例），随后输入 API Key
+#   4) 自定义: 手动输入 base_url（会给出 1 号站点作为格式示例）
 #
 # 行为说明：
-# - 再次运行时若直接回车不选择站点/不输入 Key，将保持原值不变。
-# - 若选择“自定义”，会要求输入新的 base_url；之后照常提示输入 API Key。
+# - 再次运行时若直接回车不选择站点/不输入必要信息，将保持原值不变。
+# - 对于 OpenCode：脚本不写入 API Key，请在 OpenCode 内使用 /connect 配置。
 # - 推荐安装 jq 以确保写入合法 JSON。
 #
 # Copyright (c) 2025
@@ -25,16 +25,44 @@ set -Eeuo pipefail
 umask 077
 
 # Ensure interactive terminal when piped
-if ! [ -r /dev/tty ]; then
-  echo "ERROR: /dev/tty is not readable. Please run in a terminal." >&2
+if ! [ -t 0 ] && ! [ -t 1 ] && ! [ -t 2 ]; then
+  echo "ERROR: No interactive terminal detected. Please run in a terminal." >&2
   exit 1
 fi
 
 # -------- Utils --------
+trim() {
+  # Trim leading/trailing whitespace
+  local s="${1:-}"
+  s="${s#${s%%[![:space:]]*}}"
+  s="${s%${s##*[![:space:]]}}"
+  printf "%s" "$s"
+}
+
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
-trim() { printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
-read_tty() { local __p="${1:-}"; local input; read -r -p "$__p" input < /dev/tty || true; printf "%s" "${input:-}"; }
-read_secret_tty() { local __p="${1:-}"; local input; read -r -s -p "$__p" input < /dev/tty || true; echo; printf "%s" "${input:-}"; }
+
+read_tty() {
+  local __p="${1:-}" input
+  # Read from /dev/tty when an interactive terminal exists (curl | bash safe)
+  if [ -t 1 ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    read -r -p "$__p" input < /dev/tty || true
+  else
+    read -r -p "$__p" input || true
+  fi
+  printf "%s" "${input:-}"
+}
+
+read_secret_tty() {
+  local __p="${1:-}" input
+  if [ -t 1 ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    read -r -s -p "$__p" input < /dev/tty || true
+  else
+    read -r -s -p "$__p" input || true
+  fi
+  echo
+  printf "%s" "${input:-}"
+}
+
 timestamp() { date +"%Y%m%d-%H%M%S"; }
 
 json_escape() {
@@ -241,19 +269,19 @@ strip_opencode_known_suffix() {
 }
 
 read_opencode_provider_base() {
-  # Prompt for provider base name when using custom base URLs
-  local existing="${1:-}"
+  # OpenCode provider base name (provider group prefix)
+  local default="${1:-}"
   local val
-  echo
-  echo "你选择了自定义 base_url。OpenCode 需要一个 provider 名称前缀用于生成 provider id："
-  echo "  示例：my-zeta -> my-zeta-openai / my-zeta-claude / my-zeta-gemini"
-  if [ -n "$existing" ]; then
-    echo "提示：按 Enter 保持不变（当前: ${existing}）"
-    val="$(read_tty "请输入 provider 前缀（custom-name）: ")"
+  echo >&2
+  echo "OpenCode 需要一个 provider 前缀用于生成 provider id：" >&2
+  echo "  示例：zetatechs-api -> zetatechs-api-openai / zetatechs-api-claude / zetatechs-api-gemini" >&2
+  if [ -n "$default" ]; then
+    echo "提示：按 Enter 使用默认值（当前/默认: ${default}）" >&2
+    val="$(read_tty "请输入 provider 前缀（provider-base）: ")"
     val="$(trim "$val")"
-    if [ -z "$val" ]; then printf "%s" "$existing"; return 0; fi
+    if [ -z "$val" ]; then printf "%s" "$default"; return 0; fi
   else
-    val="$(read_tty "请输入 provider 前缀（custom-name）: ")"
+    val="$(read_tty "请输入 provider 前缀（provider-base）: ")"
     val="$(trim "$val")"
     if [ -z "$val" ]; then
       echo "ERROR: provider 前缀不能为空。" >&2
@@ -264,12 +292,11 @@ read_opencode_provider_base() {
 }
 
 build_opencode_template() {
-  # Args: provider_base site_label base_v1 base_v1beta api_key
-  local pbase="${1:-}" site_label="${2:-}" base_v1="${3:-}" base_v1beta="${4:-}" api_key="${5:-}"
+  # Args: provider_base site_label base_v1 base_v1beta
+  local pbase="${1:-}" site_label="${2:-}" base_v1="${3:-}" base_v1beta="${4:-}"
 
   local openai_id="${pbase}-openai" claude_id="${pbase}-claude" gemini_id="${pbase}-gemini"
-  local api_key_json base_v1_json base_v1beta_json
-  api_key_json="$(json_escape "$api_key")"
+  local base_v1_json base_v1beta_json
   base_v1_json="$(json_escape "$base_v1")"
   base_v1beta_json="$(json_escape "$base_v1beta")"
 
@@ -281,8 +308,7 @@ build_opencode_template() {
       "npm": "@ai-sdk/openai",
       "name": "${site_label} OpenAI",
       "options": {
-        "baseURL": "${base_v1_json}",
-        "apiKey": "${api_key_json}"
+        "baseURL": "${base_v1_json}"
       },
       "models": {
         "gpt-5.2": {
@@ -400,8 +426,7 @@ build_opencode_template() {
       "npm": "@ai-sdk/anthropic",
       "name": "${site_label} Claude",
       "options": {
-        "baseURL": "${base_v1_json}",
-        "apiKey": "${api_key_json}"
+        "baseURL": "${base_v1_json}"
       },
       "models": {
         "claude-haiku-4-5-20251001": { "name": "Claude-Haiku-4-5-20251001" },
@@ -416,8 +441,7 @@ build_opencode_template() {
       "npm": "@ai-sdk/google",
       "name": "${site_label} Gemini",
       "options": {
-        "baseURL": "${base_v1beta_json}",
-        "apiKey": "${api_key_json}"
+        "baseURL": "${base_v1beta_json}"
       },
       "models": {
         "gemini-3-pro-preview": { "name": "Gemini 3 Pro Preview" },
@@ -429,42 +453,70 @@ build_opencode_template() {
 EOF
 }
 
-upsert_opencode_provider_keys_jq() {
-  # Args: cfg provider_id base_url api_key
-  local cfg="${1:-}" pid="${2:-}" base="${3:-}" key="${4:-}"
+upsert_opencode_provider_baseurl_jq() {
+  # Args: cfg provider_id base_url
+  local cfg="${1:-}" pid="${2:-}" base="${3:-}"
   local tmp
   tmp="$(mktemp)"
-  jq --arg pid "$pid" --arg base "$base" --arg key "$key" '
+  jq --arg pid "$pid" --arg base "$base" '
     .provider = (.provider // {})
     | .provider[$pid] = (.provider[$pid] // {})
     | .provider[$pid].options = (.provider[$pid].options // {})
     | .provider[$pid].options.baseURL = $base
-    | .provider[$pid].options.apiKey = $key
   ' "$cfg" > "$tmp"
   cp "$cfg" "$cfg.bak.$(timestamp)" || true
   mv "$tmp" "$cfg"
 }
 
-upsert_opencode_provider_keys_fallback() {
-  # Minimal fallback that rewrites the file using the full template.
-  # This is only used when jq is missing AND we cannot safely parse/patch.
-  # Args: cfg provider_base site_label base_v1 base_v1beta api_key
-  local cfg="${1:-}" pbase="${2:-}" site_label="${3:-}" base_v1="${4:-}" base_v1beta="${5:-}" api_key="${6:-}"
-  [ -f "$cfg" ] && cp "$cfg" "$cfg.bak.$(timestamp)" || true
-  build_opencode_template "$pbase" "$site_label" "$base_v1" "$base_v1beta" "$api_key" > "$cfg"
+merge_opencode_provider_group_jq() {
+  # Merge a full provider template for a group, then set baseURLs.
+  # - Does NOT write apiKey
+  # - Does NOT overwrite existing provider blocks (preserves models / apiKey)
+  # Args: cfg provider_base site_label base_v1 base_v1beta
+  local cfg="${1:-}" pbase="${2:-}" site_label="${3:-}" base_v1="${4:-}" base_v1beta="${5:-}"
+  local tmpl tmp
+  tmpl="$(mktemp)"
+  tmp="$(mktemp)"
+
+  build_opencode_template "$pbase" "$site_label" "$base_v1" "$base_v1beta" > "$tmpl"
+
+  local openai_id="${pbase}-openai" claude_id="${pbase}-claude" gemini_id="${pbase}-gemini"
+
+  jq --slurpfile t "$tmpl" \
+    --arg openai "$openai_id" \
+    --arg claude "$claude_id" \
+    --arg gemini "$gemini_id" \
+    --arg baseV1 "$base_v1" \
+    --arg baseV1b "$base_v1beta" '
+      .["$schema"] = (.["$schema"] // $t[0]["$schema"])
+      | .provider = (.provider // {})
+      | .provider[$openai] = (.provider[$openai] // $t[0].provider[$openai])
+      | .provider[$claude] = (.provider[$claude] // $t[0].provider[$claude])
+      | .provider[$gemini] = (.provider[$gemini] // $t[0].provider[$gemini])
+      | .provider[$openai].options = (.provider[$openai].options // {})
+      | .provider[$claude].options = (.provider[$claude].options // {})
+      | .provider[$gemini].options = (.provider[$gemini].options // {})
+      | .provider[$openai].options.baseURL = $baseV1
+      | .provider[$claude].options.baseURL = $baseV1
+      | .provider[$gemini].options.baseURL = $baseV1b
+    ' "$cfg" > "$tmp"
+
+  cp "$cfg" "$cfg.bak.$(timestamp)" || true
+  mv "$tmp" "$cfg"
+  rm -f "$tmpl" || true
 }
 
 setup_opencode() {
   echo
-  echo "=== 配置 OpenCode (opencode) (~/.config/opencode/opencode.json) ==="
+  echo "=== 配置 OpenCode (~/.config/opencode/opencode.json) ==="
 
   local OPENCODE_DIR="$HOME/.config/opencode"
   local OPENCODE_CFG="$OPENCODE_DIR/opencode.json"
   mkdir -p "$OPENCODE_DIR"
 
-  # Try to infer existing provider base + baseURL + apiKey.
+  # Try to infer existing provider base + baseURL.
   # Prefer known provider ids; otherwise fall back to any provider ending with "-openai".
-  local existing_base_v1="" existing_key="" existing_provider_base=""
+  local existing_base_v1="" existing_provider_base="" existing_providers="" provider_base=""
   local known_id_main_openai="zetatechs-api-openai"
   local known_id_ent_openai="zetatechs-api-enterprise-openai"
 
@@ -474,12 +526,10 @@ setup_opencode() {
     existing_base_v1="$(jq -r --arg id "$known_id_main_openai" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
     if [ -n "$existing_base_v1" ]; then
       existing_openai_id="$known_id_main_openai"
-      existing_key="$(jq -r --arg id "$known_id_main_openai" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
     else
       existing_base_v1="$(jq -r --arg id "$known_id_ent_openai" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
       if [ -n "$existing_base_v1" ]; then
         existing_openai_id="$known_id_ent_openai"
-        existing_key="$(jq -r --arg id "$known_id_ent_openai" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
       fi
     fi
 
@@ -487,13 +537,14 @@ setup_opencode() {
       existing_openai_id="$(jq -r '.provider | keys[]? | select(test("-openai$"))' "$OPENCODE_CFG" 2>/dev/null | head -n1 || true)"
       if [ -n "$existing_openai_id" ]; then
         existing_base_v1="$(jq -r --arg id "$existing_openai_id" '.provider[$id].options.baseURL // empty' "$OPENCODE_CFG")"
-        existing_key="$(jq -r --arg id "$existing_openai_id" '.provider[$id].options.apiKey // empty' "$OPENCODE_CFG")"
       fi
     fi
 
     if [ -n "$existing_openai_id" ]; then
       existing_provider_base="${existing_openai_id%-openai}"
     fi
+
+    existing_providers="$(jq -r '.provider | keys[]?' "$OPENCODE_CFG" 2>/dev/null || true)"
   fi
 
   # For OpenCode, the selected site defines baseURL endings:
@@ -502,7 +553,7 @@ setup_opencode() {
   # We prompt once and derive both URLs.
   local existing_site_hint
   existing_site_hint="$(strip_opencode_known_suffix "$existing_base_v1")"
-  select_site "OpenCode (opencode)" "" "$existing_site_hint"
+  select_site "OpenCode" "" "$existing_site_hint"
   local selected_site_name="$SITE_NAME"
 
   # Derive /v1 and /v1beta from selected base.
@@ -522,17 +573,54 @@ setup_opencode() {
   base_v1="$(ensure_trailing_path "$base_root" "/v1")"
   base_v1beta="$(ensure_trailing_path "$base_root" "/v1beta")"
 
-  # Provider base name
-  local provider_base=""
-  if [ "$selected_site_name" = "主站" ]; then
-    provider_base="zetatechs-api"
-  elif [ "$selected_site_name" = "企业站" ]; then
-    provider_base="zetatechs-api-enterprise"
-  elif [ "$selected_site_name" = "保持不变" ] && [ -n "$existing_provider_base" ]; then
-    provider_base="$existing_provider_base"
+  # Provider group management: add vs update
+  local mode=""
+  if [ -n "$existing_providers" ]; then
+    echo
+    echo "OpenCode provider 配置模式："
+    echo "  1) 添加 provider group（新增一组 provider 前缀）"
+    echo "  2) 更新 provider group（选择现有 provider 前缀并更新 baseURL）"
+    mode="$(read_tty "输入选项 [1/2] (默认 2): ")"
+    mode="${mode:-2}"
   else
-    # For Codex站 and for custom base URL, ask for name
-    provider_base="$(read_opencode_provider_base "$existing_provider_base")"
+    mode="1"
+  fi
+
+  # Detect existing provider groups from IDs: <base>-openai/-claude/-gemini
+  local existing_groups=""
+  if [ -n "$existing_providers" ]; then
+    existing_groups="$(printf '%s\n' "$existing_providers" | sed -n 's/\(.*\)-\(openai\|claude\|gemini\)$/\1/p' | sort -u)"
+  fi
+
+  if [ "$mode" = "1" ]; then
+    # Suggest a default base derived from the selected site
+    local default_base=""
+    if [ "$selected_site_name" = "主站" ]; then default_base="zetatechs-api";
+    elif [ "$selected_site_name" = "企业站" ]; then default_base="zetatechs-api-enterprise";
+    elif [ -n "$existing_provider_base" ]; then default_base="$existing_provider_base";
+    else default_base=""; fi
+
+    provider_base="$(read_opencode_provider_base "$default_base")"
+  elif [ "$mode" = "2" ]; then
+    if [ -z "$existing_groups" ]; then
+      echo "ERROR: 未检测到可更新的 provider group。" >&2
+      exit 1
+    fi
+    echo
+    echo "已检测到 provider groups："
+    printf '%s\n' "$existing_groups" | nl -w2 -s') '
+    local idx
+    idx="$(read_tty "选择要更新的 group 序号 (默认 1): ")"
+    idx="${idx:-1}"
+    provider_base="$(printf '%s\n' "$existing_groups" | sed -n "${idx}p")"
+    provider_base="$(trim "$provider_base")"
+    if [ -z "$provider_base" ]; then
+      echo "ERROR: 无效选择。" >&2
+      exit 1
+    fi
+  else
+    echo "无效选项：$mode" >&2
+    exit 1
   fi
 
   local site_label="ZetaTechs ${selected_site_name}"
@@ -544,39 +632,99 @@ setup_opencode() {
     fi
   fi
 
-  # Token prompt + key
-  prompt_api_key "OPENAI_API_KEY" "$existing_key" "$TOKEN_URL"
-
-  local key_to_write
-  if [ "$KEPT_KEY" = true ]; then key_to_write="$existing_key"; else key_to_write="$NEW_API_KEY"; fi
+  # OpenCode 不在脚本中填写 API Key。
+  # 请在 OpenCode 内执行 /connect，选择 provider 并填写 Key。
 
   # If file missing, always create full template
   if [ ! -f "$OPENCODE_CFG" ]; then
-    build_opencode_template "$provider_base" "$site_label" "$base_v1" "$base_v1beta" "$key_to_write" > "$OPENCODE_CFG"
+    build_opencode_template "$provider_base" "$site_label" "$base_v1" "$base_v1beta" > "$OPENCODE_CFG"
   else
     if has_cmd jq && jq -e . "$OPENCODE_CFG" >/dev/null 2>&1; then
-      local openai_id="${provider_base}-openai"
-      local claude_id="${provider_base}-claude"
-      local gemini_id="${provider_base}-gemini"
-      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$openai_id" "$base_v1" "$key_to_write"
-      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$claude_id" "$base_v1" "$key_to_write"
-      upsert_opencode_provider_keys_jq "$OPENCODE_CFG" "$gemini_id" "$base_v1beta" "$key_to_write"
+      # Ensure the selected group exists; preserve existing provider blocks if already present.
+      merge_opencode_provider_group_jq "$OPENCODE_CFG" "$provider_base" "$site_label" "$base_v1" "$base_v1beta"
     else
-      echo "注意：未检测到 jq 或现有 JSON 非法，将覆盖 $OPENCODE_CFG（已创建备份）。"
-      upsert_opencode_provider_keys_fallback "$OPENCODE_CFG" "$provider_base" "$site_label" "$base_v1" "$base_v1beta" "$key_to_write"
+      echo "注意：未检测到 jq 或现有 JSON 非法，无法安全合并。"
+      echo "为避免误覆盖你的 OpenCode 配置，请安装 jq 后重试，或手工编辑：$OPENCODE_CFG"
+      exit 1
     fi
   fi
+
+  # Reload provider list after changes
+  local providers_after=""
+  if has_cmd jq && jq -e . "$OPENCODE_CFG" >/dev/null 2>&1; then
+    providers_after="$(jq -r '.provider | keys[]?' "$OPENCODE_CFG" 2>/dev/null || true)"
+  fi
+
 
   chmod 700 "$OPENCODE_DIR" || true
   chmod 600 "$OPENCODE_CFG" || true
 
-  echo "✅ OpenCode (opencode) 已配置："
+  echo "✅ OpenCode 已配置："
   echo "  配置文件: $OPENCODE_CFG"
-  echo "  provider 前缀: ${provider_base}"
+  echo "  当前 provider group: ${provider_base}"
   echo "  baseURL (OpenAI/Claude): $base_v1"
   echo "  baseURL (Gemini): $base_v1beta"
-  echo "  provider name 前缀: ${site_label}"
-  if [ "$KEPT_KEY" = true ]; then echo "  API Key: 保持不变"; else echo "  API Key: 已更新"; fi
+  echo "  提示：请在 OpenCode 内执行 /connect，选择对应 provider 并填写 API Key。"
+
+  if [ -n "$providers_after" ]; then
+    echo
+    echo "  当前 providers："
+    printf '%s\n' "$providers_after" | sed 's/^/  - /'
+  fi
+
+  # Optional deletion (group-based)
+  if [ -n "$providers_after" ] && has_cmd jq && jq -e . "$OPENCODE_CFG" >/dev/null 2>&1; then
+    local del
+    del="$(read_tty "是否删除某个 provider group？输入 y 删除，其它跳过 [y/N]: ")"
+    del="$(trim "$del")"
+    if [ "$del" = "y" ] || [ "$del" = "Y" ]; then
+      local groups_after
+      groups_after="$(printf '%s\n' "$providers_after" | sed -n 's/\(.*\)-\(openai\|claude\|gemini\)$/\1/p' | sort -u)"
+      if [ -z "$groups_after" ]; then
+        echo "未检测到可删除的 provider group。"
+      else
+        echo
+        echo "可删除的 provider groups："
+        printf '%s\n' "$groups_after" | nl -w2 -s') '
+        local del_idx del_base
+        del_idx="$(read_tty "选择要删除的 group 序号 (默认 1): ")"
+        del_idx="${del_idx:-1}"
+        del_base="$(printf '%s\n' "$groups_after" | sed -n "${del_idx}p")"
+        del_base="$(trim "$del_base")"
+        if [ -z "$del_base" ]; then
+          echo "无效选择，已跳过删除。"
+        else
+          local del_confirm
+          del_confirm="$(read_tty "确认删除 group '${del_base}' 及其 3 个 providers？输入 DELETE 确认: ")"
+          if [ "$(trim "$del_confirm")" = "DELETE" ]; then
+            cp "$OPENCODE_CFG" "$OPENCODE_CFG.bak.$(timestamp)" || true
+            local tmp
+            tmp="$(mktemp)"
+            jq --arg base "$del_base" '
+              .provider = (.provider // {})
+              | del(.provider[(($base)+"-openai")])
+              | del(.provider[(($base)+"-claude")])
+              | del(.provider[(($base)+"-gemini")])
+            ' "$OPENCODE_CFG" > "$tmp"
+            mv "$tmp" "$OPENCODE_CFG"
+            chmod 600 "$OPENCODE_CFG" || true
+            echo "已删除 provider group: $del_base"
+            local providers_final
+            providers_final="$(jq -r '.provider | keys[]?' "$OPENCODE_CFG" 2>/dev/null || true)"
+            if [ -n "$providers_final" ]; then
+              echo "当前 providers："
+              printf '%s\n' "$providers_final" | sed 's/^/  - /'
+            else
+              echo "当前 providers：<empty>"
+            fi
+          else
+            echo "未确认 DELETE，已跳过删除。"
+          fi
+        fi
+      fi
+    fi
+  fi
+
 }
 
 
@@ -821,23 +969,23 @@ setup_anthropic() {
 echo "=== Zetatechs Coding CLI 配置向导 ==="
 echo
   echo "请选择要配置的应用："
-  echo "  1) Factory Droid CLI"
+  echo "  1) OpenCode"
   echo "  2) OpenAI Codex CLI"
   echo "  3) Anthropic Claude Code CLI"
-  echo "  4) OpenCode (opencode)"
+  echo "  4) Factory Droid CLI"
 
   app_choice="$(read_tty "输入选项 [1/2/3/4] (默认 1): ")"
   app_choice="${app_choice:-1}"
 
   case "$app_choice" in
-    1) setup_factory ;;
+    1) setup_opencode ;;
     2) setup_codex ;;
     3) setup_anthropic ;;
-    4) setup_opencode ;;
+    4) setup_factory ;;
     *) echo "无效选项：$app_choice" >&2; exit 1 ;;
   esac
 
 
 echo
 echo "完成。再次运行本脚本时："
-echo "- 如不选择站点或不输入 API Key，将保持现有配置不变（不会清空）。"
+echo "- 如不选择站点或不输入必要信息，将保持现有配置不变（不会清空）。"
