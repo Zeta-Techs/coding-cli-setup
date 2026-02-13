@@ -17,6 +17,12 @@ function Extract-Host([string]$url) {
 
 function Timestamp() { (Get-Date).ToString('yyyyMMdd-HHmmss') }
 
+function Get-UserProfilePath() {
+  $userProfile = [Environment]::GetFolderPath('UserProfile')
+  if (-not $userProfile) { $userProfile = $env:USERPROFILE }
+  return $userProfile
+}
+
 function Read-Trim([string]$prompt, [string]$default='') {
   $v = Read-Host $prompt
   if ([string]::IsNullOrWhiteSpace($v)) { return $default }
@@ -109,6 +115,49 @@ function Prompt-ApiKey([string]$KeyLabel, [string]$Existing, [string]$TokenUrl) 
   [pscustomobject]@{ KeptKey=$false; Value=$input }
 }
 
+function Select-ResetAction([string]$AppLabel, [string]$DefaultChoice='1') {
+  Write-Host
+  Write-Host "$AppLabel 操作："
+  Write-Host '  1) 配置/更新'
+  Write-Host '  2) 恢复默认设置（删除脚本管理的配置）'
+  $choice = Read-Trim "输入选项 [1/2] (默认 $DefaultChoice)" $DefaultChoice
+  switch ($choice) {
+    '1' { return 'configure' }
+    '2' { return 'restore' }
+    Default { throw "无效选项：$choice" }
+  }
+}
+
+function Confirm-RestoreDefaults([string]$AppLabel) {
+  Write-Host
+  Write-Host "你选择了恢复默认设置：$AppLabel"
+  Write-Host '该操作会删除脚本管理的配置，可能不可逆。'
+  $confirm = Read-Trim '输入 RESET 确认恢复默认设置，其它输入取消' ''
+  return ($confirm -eq 'RESET')
+}
+
+function Backup-And-DeleteFile([string]$Path) {
+  if (-not $Path) { return $null }
+  if (-not (Test-Path -LiteralPath $Path)) { return $null }
+
+  $backup = "$Path.bak.$(Timestamp)"
+  Copy-Item -LiteralPath $Path -Destination $backup -Force
+  Remove-Item -LiteralPath $Path -Force
+  return $backup
+}
+
+function Reset-AnthropicEnvironment([string]$Scope='User') {
+  $beforeBase = [Environment]::GetEnvironmentVariable('ANTHROPIC_BASE_URL', $Scope)
+  $beforeKey = [Environment]::GetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN', $Scope)
+
+  [Environment]::SetEnvironmentVariable('ANTHROPIC_BASE_URL', $null, $Scope)
+  [Environment]::SetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN', $null, $Scope)
+
+  return [pscustomobject]@{
+    HadManagedValues = [bool]($beforeBase -or $beforeKey)
+  }
+}
+
 function New-Model([string]$name,[string]$model,[string]$base,[string]$key) {
   [ordered]@{
     model_display_name = $name
@@ -123,11 +172,28 @@ function New-Model([string]$name,[string]$model,[string]$base,[string]$key) {
 function Setup-Factory() {
   Write-Host
   Write-Host '=== 配置 Factory Droid CLI (~/.factory/config.json) ==='
-  $userProfile = [Environment]::GetFolderPath('UserProfile')
-  if (-not $userProfile) { $userProfile = $env:USERPROFILE }
+  $userProfile = Get-UserProfilePath
   $dir = Join-Path $userProfile '.factory'
   $cfg = Join-Path $dir 'config.json'
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+  $action = Select-ResetAction 'Factory Droid CLI' '1'
+  if ($action -eq 'restore') {
+    if (-not (Confirm-RestoreDefaults 'Factory Droid CLI')) {
+      Write-Host '已取消恢复默认设置，保持现有配置不变。'
+      return
+    }
+
+    $backup = Backup-And-DeleteFile $cfg
+    if ($backup) {
+      Write-Host '✅ Factory Droid CLI 已恢复默认设置。'
+      Write-Host "  备份文件: $backup"
+      Write-Host "  已删除: $cfg"
+    } else {
+      Write-Host 'ℹ️ Factory Droid CLI 已是默认设置（未检测到配置文件）。'
+    }
+    return
+  }
 
   $existingBase = ''
   $existingKey = ''
@@ -440,8 +506,7 @@ function Setup-OpenCode() {
   Write-Host
   Write-Host '=== 配置 OpenCode (%USERPROFILE%\\.config\\opencode\\opencode.json) ==='
 
-  $userProfile = [Environment]::GetFolderPath('UserProfile')
-  if (-not $userProfile) { $userProfile = $env:USERPROFILE }
+  $userProfile = Get-UserProfilePath
 
   $dir = Join-Path (Join-Path $userProfile '.config') 'opencode'
   $cfg = Join-Path $dir 'opencode.json'
@@ -470,25 +535,6 @@ function Setup-OpenCode() {
     } catch {}
   }
 
-  $sel = Select-Site 'OpenCode' '' (Strip-OpenCodeSuffix $existingBaseV1)
-  $selectedSiteName = $sel.SiteName
-
-  $selectedBaseRaw = if ($sel.KeptBase -and $existingBaseV1) { $existingBaseV1 } else { $sel.BaseUrl }
-  $baseRoot = Strip-OpenCodeSuffix $selectedBaseRaw
-  $baseV1 = Ensure-TrailingPath $baseRoot '/v1'
-  $baseV1beta = Ensure-TrailingPath $baseRoot '/v1beta'
-
-  # Provider group management: add vs update
-  $mode = 'add'
-  if ($existingProviders -and $existingProviders.Count -gt 0) {
-    Write-Host
-    Write-Host 'OpenCode provider 配置模式：'
-    Write-Host '  1) 添加 provider group（新增一组 provider 前缀）'
-    Write-Host '  2) 更新 provider group（选择现有 provider 前缀并更新 baseURL）'
-    $m = Read-Trim '输入选项 [1/2] (默认 2)' '2'
-    if ($m -eq '1') { $mode = 'add' } else { $mode = 'update' }
-  }
-
   $existingGroups = @()
   if ($existingProviders) {
     $existingGroups = @(
@@ -498,6 +544,47 @@ function Setup-OpenCode() {
         Sort-Object -Unique
     )
   }
+
+  # Provider group management: add / update / restore defaults
+  $mode = 'add'
+  $defaultChoice = if ($existingGroups -and $existingGroups.Count -gt 0) { '2' } else { '1' }
+  Write-Host
+  Write-Host 'OpenCode provider 配置模式：'
+  Write-Host '  1) 添加 provider group（新增一组 provider 前缀）'
+  Write-Host '  2) 更新 provider group（选择现有 provider 前缀并更新 baseURL）'
+  Write-Host '  3) 恢复默认设置（删除 OpenCode 配置文件）'
+  $m = Read-Trim "输入选项 [1/2/3] (默认 $defaultChoice)" $defaultChoice
+  switch ($m) {
+    '1' { $mode = 'add' }
+    '2' { $mode = 'update' }
+    '3' { $mode = 'restore' }
+    Default { throw "无效选项：$m" }
+  }
+
+  if ($mode -eq 'restore') {
+    if (-not (Confirm-RestoreDefaults 'OpenCode')) {
+      Write-Host '已取消恢复默认设置，保持现有配置不变。'
+      return
+    }
+
+    $backup = Backup-And-DeleteFile $cfg
+    if ($backup) {
+      Write-Host '✅ OpenCode 已恢复默认设置。'
+      Write-Host "  备份文件: $backup"
+      Write-Host "  已删除: $cfg"
+    } else {
+      Write-Host 'ℹ️ OpenCode 已是默认设置（未检测到配置文件）。'
+    }
+    return
+  }
+
+  $sel = Select-Site 'OpenCode' '' (Strip-OpenCodeSuffix $existingBaseV1)
+  $selectedSiteName = $sel.SiteName
+
+  $selectedBaseRaw = if ($sel.KeptBase -and $existingBaseV1) { $existingBaseV1 } else { $sel.BaseUrl }
+  $baseRoot = Strip-OpenCodeSuffix $selectedBaseRaw
+  $baseV1 = Ensure-TrailingPath $baseRoot '/v1'
+  $baseV1beta = Ensure-TrailingPath $baseRoot '/v1beta'
 
   $providerBase = ''
   if ($mode -eq 'add') {
@@ -619,6 +706,26 @@ function Setup-Anthropic() {
   if (-not $existingBase) { $existingBase = [Environment]::GetEnvironmentVariable('ANTHROPIC_BASE_URL','Process') }
   $existingKey  = [Environment]::GetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN','User')
   if (-not $existingKey)  { $existingKey  = [Environment]::GetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN','Process') }
+
+  $action = Select-ResetAction 'Anthropic Claude Code CLI' '1'
+  if ($action -eq 'restore') {
+    if (-not (Confirm-RestoreDefaults 'Anthropic Claude Code CLI')) {
+      Write-Host '已取消恢复默认设置，保持现有配置不变。'
+      return
+    }
+
+    $resetResult = Reset-AnthropicEnvironment 'User'
+    Remove-Item Env:ANTHROPIC_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
+
+    if ($resetResult.HadManagedValues) {
+      Write-Host '✅ Anthropic Claude Code CLI 已恢复默认设置。'
+      Write-Host '  已移除用户级 ANTHROPIC_BASE_URL 与 ANTHROPIC_AUTH_TOKEN。'
+    } else {
+      Write-Host 'ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到用户级 ANTHROPIC_* 配置）。'
+    }
+    return
+  }
 
   $sel = Select-Site 'Anthropic Claude Code CLI' '' $existingBase
   $keyRes = Prompt-ApiKey 'ANTHROPIC_AUTH_TOKEN' $existingKey $sel.TokenUrl

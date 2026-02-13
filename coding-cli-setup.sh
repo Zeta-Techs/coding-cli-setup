@@ -86,6 +86,69 @@ upsert_export() {
   fi
 }
 
+remove_export() {
+  # Remove export KEY=... lines from an rc file
+  # Returns 0 when a line was removed; 1 otherwise.
+  local rcfile="${1:-}" key="${2:-}"
+  [ -z "$rcfile" ] && return 1
+  [ -z "$key" ] && return 1
+  [ -f "$rcfile" ] || return 1
+
+  local pattern="^[[:space:]]*(export[[:space:]]+)?${key}="
+  if grep -Eq "$pattern" "$rcfile"; then
+    sed -i.bak -E "/$pattern/d" "$rcfile"
+    rm -f "$rcfile.bak" 2>/dev/null || true
+    return 0
+  fi
+
+  return 1
+}
+
+select_restore_action() {
+  # Args: app_label default_choice
+  local app_label="${1:-}" default_choice="${2:-1}" choice
+
+  echo
+  echo "${app_label} 操作："
+  echo "  1) 配置/更新"
+  echo "  2) 恢复默认设置（删除脚本管理的配置）"
+  choice="$(read_tty "输入选项 [1/2] (默认 ${default_choice}): ")"
+  choice="${choice:-$default_choice}"
+
+  case "$choice" in
+    1) printf "%s" "configure" ;;
+    2) printf "%s" "restore" ;;
+    *) echo "无效选项：$choice" >&2; exit 1 ;;
+  esac
+}
+
+confirm_restore_defaults() {
+  # Args: app_label
+  local app_label="${1:-}"
+  local confirm
+
+  echo
+  echo "你选择了恢复默认设置：${app_label}"
+  echo "该操作会删除脚本管理的配置，可能不可逆。"
+  confirm="$(read_tty "输入 RESET 确认恢复默认设置，其它输入取消: ")"
+  confirm="$(trim "$confirm")"
+
+  [ "$confirm" = "RESET" ]
+}
+
+backup_then_delete_file() {
+  # Args: file_path
+  # Prints backup path when file existed and was deleted.
+  local file_path="${1:-}"
+  [ -z "$file_path" ] && return 1
+  [ -f "$file_path" ] || return 1
+
+  local backup_path="${file_path}.bak.$(timestamp)"
+  cp "$file_path" "$backup_path"
+  rm -f "$file_path"
+  printf "%s" "$backup_path"
+}
+
 # Read env value from runtime or rc files (best-effort)
 read_env_from_rcs() {
   local key="${1:-}" val=""
@@ -540,6 +603,44 @@ setup_opencode() {
     existing_providers="$(jq -r '.provider | keys[]?' "$OPENCODE_CFG" 2>/dev/null || true)"
   fi
 
+  # Detect existing provider groups from IDs: <base>-openai/-claude/-gemini
+  local existing_groups=""
+  if [ -n "$existing_providers" ]; then
+    existing_groups="$(printf '%s\n' "$existing_providers" | sed -n 's/\(.*\)-\(openai\|claude\|gemini\)$/\1/p' | sort -u)"
+  fi
+
+  # Provider group management: add / update / restore defaults
+  local mode="" default_mode="1"
+  if [ -n "$existing_groups" ]; then
+    default_mode="2"
+  fi
+
+  echo
+  echo "OpenCode provider 配置模式："
+  echo "  1) 添加 provider group（新增一组 provider 前缀）"
+  echo "  2) 更新 provider group（选择现有 provider 前缀并更新 baseURL）"
+  echo "  3) 恢复默认设置（删除 OpenCode 配置文件）"
+  mode="$(read_tty "输入选项 [1/2/3] (默认 ${default_mode}): ")"
+  mode="${mode:-$default_mode}"
+
+  if [ "$mode" = "3" ]; then
+    local backup_path
+    if ! confirm_restore_defaults "OpenCode"; then
+      echo "已取消恢复默认设置，保持现有配置不变。"
+      return 0
+    fi
+
+    if backup_path="$(backup_then_delete_file "$OPENCODE_CFG")"; then
+      echo "✅ OpenCode 已恢复默认设置。"
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $OPENCODE_CFG"
+    else
+      echo "ℹ️ OpenCode 已是默认设置（未检测到配置文件）。"
+    fi
+
+    return 0
+  fi
+
   # For OpenCode, the selected site defines baseURL endings:
   # - OpenAI/Claude: /v1
   # - Gemini: /v1beta
@@ -565,25 +666,6 @@ setup_opencode() {
   base_root="$(strip_opencode_known_suffix "$selected_base_raw")"
   base_v1="$(ensure_trailing_path "$base_root" "/v1")"
   base_v1beta="$(ensure_trailing_path "$base_root" "/v1beta")"
-
-  # Provider group management: add vs update
-  local mode=""
-  if [ -n "$existing_providers" ]; then
-    echo
-    echo "OpenCode provider 配置模式："
-    echo "  1) 添加 provider group（新增一组 provider 前缀）"
-    echo "  2) 更新 provider group（选择现有 provider 前缀并更新 baseURL）"
-    mode="$(read_tty "输入选项 [1/2] (默认 2): ")"
-    mode="${mode:-2}"
-  else
-    mode="1"
-  fi
-
-  # Detect existing provider groups from IDs: <base>-openai/-claude/-gemini
-  local existing_groups=""
-  if [ -n "$existing_providers" ]; then
-    existing_groups="$(printf '%s\n' "$existing_providers" | sed -n 's/\(.*\)-\(openai\|claude\|gemini\)$/\1/p' | sort -u)"
-  fi
 
   if [ "$mode" = "1" ]; then
     # Suggest a default base derived from the selected site
@@ -728,6 +810,26 @@ setup_factory() {
   local FACTORY_DIR="$HOME/.factory"
   local FACTORY_CFG="$FACTORY_DIR/config.json"
   mkdir -p "$FACTORY_DIR"
+
+  local factory_action
+  factory_action="$(select_restore_action "Factory Droid CLI" "1")"
+  if [ "$factory_action" = "restore" ]; then
+    local backup_path
+    if ! confirm_restore_defaults "Factory Droid CLI"; then
+      echo "已取消恢复默认设置，保持现有配置不变。"
+      return 0
+    fi
+
+    if backup_path="$(backup_then_delete_file "$FACTORY_CFG")"; then
+      echo "✅ Factory Droid CLI 已恢复默认设置。"
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $FACTORY_CFG"
+    else
+      echo "ℹ️ Factory Droid CLI 已是默认设置（未检测到配置文件）。"
+    fi
+
+    return 0
+  fi
 
   # Read existing values
   local existing_base="" existing_key=""
@@ -887,6 +989,35 @@ setup_codex() {
     existing_key="$(sed -n 's/^[[:space:]]*"OPENAI_API_KEY"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AUTH_FILE" | head -n1 || true)"
   fi
 
+  local codex_action
+  codex_action="$(select_restore_action "OpenAI Codex CLI" "1")"
+  if [ "$codex_action" = "restore" ]; then
+    local backup_path removed_any=false
+    if ! confirm_restore_defaults "OpenAI Codex CLI"; then
+      echo "已取消恢复默认设置，保持现有配置不变。"
+      return 0
+    fi
+
+    if backup_path="$(backup_then_delete_file "$CONFIG_FILE")"; then
+      removed_any=true
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $CONFIG_FILE"
+    fi
+    if backup_path="$(backup_then_delete_file "$AUTH_FILE")"; then
+      removed_any=true
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $AUTH_FILE"
+    fi
+
+    if [ "$removed_any" = true ]; then
+      echo "✅ OpenAI Codex CLI 已恢复默认设置。"
+    else
+      echo "ℹ️ OpenAI Codex CLI 已是默认设置（未检测到配置文件）。"
+    fi
+
+    return 0
+  fi
+
   select_site "OpenAI Codex CLI" "/v1" "$existing_base"
   prompt_api_key "OPENAI_API_KEY" "$existing_key" "$TOKEN_URL"
 
@@ -934,6 +1065,30 @@ setup_anthropic() {
   local existing_base existing_key
   existing_base="$(read_env_from_rcs "ANTHROPIC_BASE_URL")"
   existing_key="$(read_env_from_rcs "ANTHROPIC_AUTH_TOKEN")"
+
+  local anthropic_action
+  anthropic_action="$(select_restore_action "Anthropic Claude Code CLI" "1")"
+  if [ "$anthropic_action" = "restore" ]; then
+    local removed_any=false
+    if ! confirm_restore_defaults "Anthropic Claude Code CLI"; then
+      echo "已取消恢复默认设置，保持现有配置不变。"
+      return 0
+    fi
+
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+      if remove_export "$rc" "ANTHROPIC_BASE_URL"; then removed_any=true; fi
+      if remove_export "$rc" "ANTHROPIC_AUTH_TOKEN"; then removed_any=true; fi
+    done
+
+    if [ "$removed_any" = true ]; then
+      echo "✅ Anthropic Claude Code CLI 已恢复默认设置。"
+      echo "  已移除 ~/.bashrc 与 ~/.zshrc 中脚本管理的 ANTHROPIC_* 配置。"
+    else
+      echo "ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到脚本管理的 ANTHROPIC_* 配置）。"
+    fi
+
+    return 0
+  fi
 
   # Anthropic 默认不加 /v1，若你需要可手动自定义选择 4
   select_site "Anthropic Claude Code CLI" "" "$existing_base"
