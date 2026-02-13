@@ -22,29 +22,26 @@ For file-based targets, the system SHALL restore defaults by deleting managed co
 - **THEN** the script backs up `opencode.json` if it exists
 - **AND THEN** the script deletes `opencode.json`
 
+#### Scenario: Codex reset deletes both managed files
+- **WHEN** the user confirms restore-default for OpenAI Codex CLI in the Bash script
+- **THEN** the script backs up `~/.codex/config.toml` and `~/.codex/auth.json` if they exist
+- **AND THEN** the script deletes `~/.codex/config.toml` and `~/.codex/auth.json`
+
 #### Scenario: Factory reset deletes config file
 - **WHEN** the user confirms restore-default for Factory Droid CLI
 - **THEN** the script backs up the target `config.json` if it exists
 - **AND THEN** the script deletes that `config.json`
 
 ### Requirement: Anthropic Environment Reset Behavior
-For Anthropic Claude Code CLI, the system SHALL restore defaults by removing managed environment variable settings for `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` from persistent storage and from the current process where supported.
+For Anthropic Claude Code CLI, the system SHALL restore defaults by removing managed environment variable settings for `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`.
 
 #### Scenario: Bash Anthropic reset removes rc exports
 - **WHEN** the user confirms restore-default for Anthropic in the Bash script
 - **THEN** the script removes managed export lines for `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` from `~/.bashrc` and `~/.zshrc`
 
-#### Scenario: Bash Anthropic reset clears process env
-- **WHEN** the user confirms restore-default for Anthropic in the Bash script
-- **THEN** the script unsets process-level `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` for the running shell process
-
 #### Scenario: PowerShell Anthropic reset removes user env vars
 - **WHEN** the user confirms restore-default for Anthropic in the PowerShell script
 - **THEN** the script removes user-level `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` values
-
-#### Scenario: PowerShell Anthropic reset clears process env
-- **WHEN** the user confirms restore-default for Anthropic in the PowerShell script
-- **THEN** the script removes process-level `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` values
 
 ### Requirement: Reset Safety and Idempotency
 The system SHALL require explicit destructive confirmation before reset, SHALL leave settings unchanged when confirmation is not provided, and SHALL succeed when targets are already at defaults.
@@ -57,18 +54,4 @@ The system SHALL require explicit destructive confirmation before reset, SHALL l
 - **WHEN** the user confirms restore-default for a target that has no managed config file or environment variable setting present
 - **THEN** the script exits without error
 - **AND THEN** the script reports that the target is already at software defaults
-
-### Requirement: Codex Environment Reset Behavior
-For OpenAI Codex CLI in the Bash script, the system SHALL restore defaults by clearing Codex-related environment variables and SHALL NOT delete `~/.codex/config.toml` or `~/.codex/auth.json` during restore-default.
-
-#### Scenario: Codex reset clears env vars only
-- **WHEN** the user confirms restore-default for OpenAI Codex CLI in the Bash script
-- **THEN** the script removes `OPENAI_API_KEY` and `OPENAI_BASE_URL` from managed shell rc exports when present
-- **AND THEN** the script unsets process-level `OPENAI_API_KEY` and `OPENAI_BASE_URL`
-- **AND THEN** the script does not delete `~/.codex/config.toml` or `~/.codex/auth.json`
-
-#### Scenario: Codex reset with no env vars set
-- **WHEN** the user confirms restore-default for OpenAI Codex CLI in the Bash script
-- **AND WHEN** no managed `OPENAI_API_KEY` or `OPENAI_BASE_URL` values are present
-- **THEN** the script exits without error and reports that Codex is already at defaults
 

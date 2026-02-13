@@ -992,31 +992,27 @@ setup_codex() {
   local codex_action
   codex_action="$(select_restore_action "OpenAI Codex CLI" "1")"
   if [ "$codex_action" = "restore" ]; then
-    local removed_any=false
+    local backup_path removed_any=false
     if ! confirm_restore_defaults "OpenAI Codex CLI"; then
       echo "已取消恢复默认设置，保持现有配置不变。"
       return 0
     fi
 
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-      if remove_export "$rc" "OPENAI_API_KEY"; then removed_any=true; fi
-      if remove_export "$rc" "OPENAI_BASE_URL"; then removed_any=true; fi
-    done
-
-    if [ -n "${OPENAI_API_KEY+x}" ]; then
-      unset OPENAI_API_KEY
+    if backup_path="$(backup_then_delete_file "$CONFIG_FILE")"; then
       removed_any=true
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $CONFIG_FILE"
     fi
-    if [ -n "${OPENAI_BASE_URL+x}" ]; then
-      unset OPENAI_BASE_URL
+    if backup_path="$(backup_then_delete_file "$AUTH_FILE")"; then
       removed_any=true
+      echo "  备份文件: $backup_path"
+      echo "  已删除: $AUTH_FILE"
     fi
 
     if [ "$removed_any" = true ]; then
       echo "✅ OpenAI Codex CLI 已恢复默认设置。"
-      echo "  已清理 OPENAI_API_KEY 与 OPENAI_BASE_URL（rc 持久化项 + 当前会话）。"
     else
-      echo "ℹ️ OpenAI Codex CLI 已是默认设置（未检测到 OPENAI_API_KEY / OPENAI_BASE_URL 配置）。"
+      echo "ℹ️ OpenAI Codex CLI 已是默认设置（未检测到配置文件）。"
     fi
 
     return 0
@@ -1084,20 +1080,11 @@ setup_anthropic() {
       if remove_export "$rc" "ANTHROPIC_AUTH_TOKEN"; then removed_any=true; fi
     done
 
-    if [ -n "${ANTHROPIC_BASE_URL+x}" ]; then
-      unset ANTHROPIC_BASE_URL
-      removed_any=true
-    fi
-    if [ -n "${ANTHROPIC_AUTH_TOKEN+x}" ]; then
-      unset ANTHROPIC_AUTH_TOKEN
-      removed_any=true
-    fi
-
     if [ "$removed_any" = true ]; then
       echo "✅ Anthropic Claude Code CLI 已恢复默认设置。"
-      echo "  已清理 ANTHROPIC_*（~/.bashrc / ~/.zshrc 持久化项 + 当前会话）。"
+      echo "  已移除 ~/.bashrc 与 ~/.zshrc 中脚本管理的 ANTHROPIC_* 配置。"
     else
-      echo "ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到 ANTHROPIC_* 配置）。"
+      echo "ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到脚本管理的 ANTHROPIC_* 配置）。"
     fi
 
     return 0

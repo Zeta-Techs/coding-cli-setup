@@ -714,18 +714,15 @@ function Setup-Anthropic() {
       return
     }
 
-    $userResetResult = Reset-AnthropicEnvironment 'User'
-    $procResetResult = Reset-AnthropicEnvironment 'Process'
+    $resetResult = Reset-AnthropicEnvironment 'User'
     Remove-Item Env:ANTHROPIC_BASE_URL -ErrorAction SilentlyContinue
     Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
 
-    $removedAny = $userResetResult.HadManagedValues -or $procResetResult.HadManagedValues
-
-    if ($removedAny) {
+    if ($resetResult.HadManagedValues) {
       Write-Host '✅ Anthropic Claude Code CLI 已恢复默认设置。'
-      Write-Host '  已清理用户级与当前会话 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN。'
+      Write-Host '  已移除用户级 ANTHROPIC_BASE_URL 与 ANTHROPIC_AUTH_TOKEN。'
     } else {
-      Write-Host 'ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到 ANTHROPIC_* 配置）。'
+      Write-Host 'ℹ️ Anthropic Claude Code CLI 已是默认设置（未检测到用户级 ANTHROPIC_* 配置）。'
     }
     return
   }
