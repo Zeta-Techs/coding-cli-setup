@@ -1,18 +1,4 @@
-# cli-default-reset Specification
-
-## Purpose
-TBD - created by archiving change add-provider-reset-default. Update Purpose after archive.
-## Requirements
-### Requirement: Restore-Default Option Availability
-The system SHALL provide a `恢复默认设置` action during provider setup for each target supported by the script currently being run.
-
-#### Scenario: Bash targets include restore-default
-- **WHEN** the user runs `coding-cli-setup.sh` and enters any supported target flow (OpenCode, OpenAI Codex CLI, Anthropic Claude Code CLI, or Factory Droid CLI)
-- **THEN** that target flow includes a `恢复默认设置` action
-
-#### Scenario: PowerShell targets include restore-default
-- **WHEN** the user runs `coding-cli-setup.ps1` and enters any supported target flow (OpenCode, Anthropic Claude Code CLI, or Factory Droid CLI)
-- **THEN** that target flow includes a `恢复默认设置` action
+## MODIFIED Requirements
 
 ### Requirement: File-Based Reset Behavior
 For file-based targets, the system SHALL restore defaults by deleting managed config files after explicit confirmation and SHALL create timestamped backups for any managed file that exists.
@@ -46,17 +32,7 @@ For Anthropic Claude Code CLI, the system SHALL restore defaults by removing man
 - **WHEN** the user confirms restore-default for Anthropic in the PowerShell script
 - **THEN** the script removes process-level `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` values
 
-### Requirement: Reset Safety and Idempotency
-The system SHALL require explicit destructive confirmation before reset, SHALL leave settings unchanged when confirmation is not provided, and SHALL succeed when targets are already at defaults.
-
-#### Scenario: Reset confirmation canceled
-- **WHEN** the user selects restore-default but does not provide the required confirmation input
-- **THEN** the script does not delete any managed config file or environment variable setting
-
-#### Scenario: Already-default target
-- **WHEN** the user confirms restore-default for a target that has no managed config file or environment variable setting present
-- **THEN** the script exits without error
-- **AND THEN** the script reports that the target is already at software defaults
+## ADDED Requirements
 
 ### Requirement: Codex Environment Reset Behavior
 For OpenAI Codex CLI in the Bash script, the system SHALL restore defaults by clearing Codex-related environment variables and SHALL NOT delete `~/.codex/config.toml` or `~/.codex/auth.json` during restore-default.
@@ -71,4 +47,3 @@ For OpenAI Codex CLI in the Bash script, the system SHALL restore defaults by cl
 - **WHEN** the user confirms restore-default for OpenAI Codex CLI in the Bash script
 - **AND WHEN** no managed `OPENAI_API_KEY` or `OPENAI_BASE_URL` values are present
 - **THEN** the script exits without error and reports that Codex is already at defaults
-
